@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exams Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+
+  <header class="shell topbar glass">
+    <div>
+      <h1>Exam Display System</h1>
+      <p class="muted">Live updates from Firestore</p>
+    </div>
+    <button id="themeToggle" class="btn btn-ghost" aria-label="Toggle dark mode">Toggle Theme</button>
+  </header>
+
+  <main class="shell">
+    <section class="glass controls">
+      <div class="field">
+        <label for="searchInput">Search</label>
+        <input id="searchInput" type="search" placeholder="Search by title or description" />
+      </div>
+      <div class="field">
+        <label for="subjectFilter">Subject</label>
+        <select id="subjectFilter">
+          <option value="all">All subjects</option>
+        </select>
+      </div>
+    </section>
+
+    <section id="loadingState" class="state glass" aria-live="polite">Loading exams...</section>
+    <section id="errorState" class="state glass hidden" aria-live="assertive"></section>
+    <section id="emptyState" class="state glass hidden">No exams found.</section>
+
+    <section id="cardsGrid" class="cards-grid hidden" aria-live="polite"></section>
+  </main>
+
+  <template id="examCardTemplate">
+    <article class="exam-card glass">
+      <div class="exam-card-head">
+        <span class="badge" data-role="subject"></span>
+        <span class="date" data-role="date"></span>
+      </div>
+      <h2 data-role="title"></h2>
+      <p class="desc" data-role="description"></p>
+      <div class="meta-row">
+        <span data-role="duration"></span>
+      </div>
+      <a class="btn btn-primary hidden" data-role="download" target="_blank" rel="noopener">Download</a>
+    </article>
+  </template>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

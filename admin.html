@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exams Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+
+  <header class="shell topbar glass">
+    <div>
+      <h1>Exams Admin</h1>
+      <p class="muted">Authenticated write access only</p>
+    </div>
+    <div class="topbar-actions">
+      <button id="themeToggle" class="btn btn-ghost" aria-label="Toggle dark mode">Toggle Theme</button>
+      <button id="logoutBtn" class="btn btn-danger hidden">Logout</button>
+    </div>
+  </header>
+
+  <main class="shell admin-layout">
+    <section id="authCard" class="glass panel">
+      <h2>Admin Login</h2>
+      <form id="loginForm" class="stack">
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+        </div>
+        <button class="btn btn-primary" type="submit">Login</button>
+        <p id="authError" class="error-msg hidden"></p>
+      </form>
+    </section>
+
+    <section id="adminPanel" class="hidden admin-grid">
+      <article class="glass panel">
+        <h2 id="formTitle">Create Exam</h2>
+        <form id="examForm" class="stack">
+          <input id="editingId" type="hidden" />
+
+          <div class="field">
+            <label for="title">Title</label>
+            <input id="title" name="title" type="text" maxlength="120" required />
+          </div>
+
+          <div class="field">
+            <label for="subject">Subject</label>
+            <input id="subject" name="subject" type="text" maxlength="80" required />
+          </div>
+
+          <div class="field">
+            <label for="date">Date</label>
+            <input id="date" name="date" type="datetime-local" required />
+          </div>
+
+          <div class="field">
+            <label for="duration">Duration</label>
+            <input id="duration" name="duration" type="text" placeholder="e.g. 90 minutes" required />
+          </div>
+
+          <div class="field">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="4" maxlength="500" required></textarea>
+          </div>
+
+          <div class="field">
+            <label for="downloadLink">Download Link (optional)</label>
+            <input id="downloadLink" name="downloadLink" type="url" placeholder="https://..." />
+          </div>
+
+          <div class="row-actions">
+            <button id="saveBtn" class="btn btn-primary" type="submit">Save Exam</button>
+            <button id="cancelEditBtn" class="btn btn-ghost hidden" type="button">Cancel Edit</button>
+          </div>
+          <p id="formFeedback" class="muted"></p>
+        </form>
+      </article>
+
+      <article class="glass panel">
+        <h2>Manage Exams</h2>
+        <p id="adminLoading" class="muted">Loading exams...</p>
+        <p id="adminEmpty" class="muted hidden">No exams yet.</p>
+        <div id="adminList" class="admin-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <template id="adminItemTemplate">
+    <div class="admin-item">
+      <div>
+        <h3 data-role="title"></h3>
+        <p class="muted" data-role="meta"></p>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-ghost" data-action="edit">Edit</button>
+        <button class="btn btn-danger" data-action="delete">Delete</button>
+      </div>
+    </div>
+  </template>
+
+  <script type="module" src="./js/admin.js"></script>
+</body>
+</html>
