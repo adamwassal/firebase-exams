@@ -7,7 +7,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp
-} from "./js/firebase-client.js?v=20260218";
+} from "./js/firebase-client.js?v=20260218b";
 
 const cardsGrid = document.getElementById("cardsGrid");
 const loadingState = document.getElementById("loadingState");
@@ -173,7 +173,7 @@ function calculateScore(exam, formData) {
 
     const raw = formData.get(`answer_${idx}`);
     const selectedIndex = raw === null ? -1 : Number(raw);
-    const correctIndex = Number(q.correctIndex);
+    const correctIndex = Number(q.correctIndex ?? q.correctindex ?? q.correct_answer_index);
     const isCorrect = selectedIndex === correctIndex;
 
     if (isCorrect) score += points;

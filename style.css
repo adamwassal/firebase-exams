@@ -279,6 +279,43 @@ html[data-theme="dark"] .btn-ghost {
   align-items: center;
 }
 
+.btn-sm {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.question-builder {
+  display: grid;
+  gap: 10px;
+}
+
+.builder-item {
+  border: 1px solid rgba(120, 130, 160, 0.25);
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.builder-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.builder-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.builder-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .error-msg {
   color: #b91c1c;
   font-weight: 600;
@@ -377,6 +414,11 @@ html[data-theme="dark"] .btn-ghost {
 
 @media (max-width: 860px) {
   .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .builder-options,
+  .builder-meta {
     grid-template-columns: 1fr;
   }
 }

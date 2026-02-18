@@ -13,7 +13,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut
-} from "./firebase-client.js?v=20260218";
+} from "./firebase-client.js?v=20260218b";
 
 const authCard = document.getElementById("authCard");
 const adminPanel = document.getElementById("adminPanel");
@@ -30,6 +30,8 @@ const adminLoading = document.getElementById("adminLoading");
 const adminEmpty = document.getElementById("adminEmpty");
 const adminItemTemplate = document.getElementById("adminItemTemplate");
 const themeToggle = document.getElementById("themeToggle");
+const questionBuilder = document.getElementById("questionBuilder");
+const addQuestionBtn = document.getElementById("addQuestionBtn");
 
 let unsubscribeExams = null;
 
@@ -75,6 +77,8 @@ function resetFormMode() {
   formTitle.textContent = "Create Exam";
   cancelEditBtn.classList.add("hidden");
   examForm.reset();
+  questionBuilder.innerHTML = "";
+  addQuestionBuilderItem();
 }
 
 function parseDateInput(inputValue) {
@@ -91,50 +95,132 @@ function toDatetimeLocal(ts) {
   return local.toISOString().slice(0, 16);
 }
 
-function parseQuestionsJson(raw) {
-  const text = String(raw || "").trim();
-  if (!text) return [];
+function normalizeQuestionShape(question) {
+  const options = Array.isArray(question.options) ? question.options.map((o) => String(o).trim()).filter(Boolean) : [];
+  const rawCorrectIndex = question.correctIndex ?? question.correctindex ?? question.correct_answer_index;
+  const correctIndex = Number(rawCorrectIndex);
+  const points = Number(question.points || 1);
 
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error("Questions JSON is not valid JSON.");
-  }
+  return {
+    text: String(question.text || "").trim(),
+    options,
+    correctIndex,
+    points
+  };
+}
 
-  if (!Array.isArray(parsed)) {
-    throw new Error("Questions JSON must be an array.");
-  }
-
-  parsed.forEach((q, idx) => {
-    if (!q || typeof q !== "object") {
-      throw new Error(`Question #${idx + 1} must be an object.`);
-    }
-
-    if (!q.text || typeof q.text !== "string") {
+function validateQuestions(questions) {
+  questions.forEach((q, idx) => {
+    if (!q.text) {
       throw new Error(`Question #${idx + 1} is missing text.`);
     }
-
     if (!Array.isArray(q.options) || q.options.length < 2) {
       throw new Error(`Question #${idx + 1} must have at least 2 options.`);
     }
-
-    const correctIndex = Number(q.correctIndex);
-    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= q.options.length) {
-      throw new Error(`Question #${idx + 1} has invalid correctIndex.`);
+    if (!Number.isInteger(q.correctIndex) || q.correctIndex < 0 || q.correctIndex >= q.options.length) {
+      throw new Error(`Question #${idx + 1} has invalid correct answer.`);
     }
-
-    if (q.points !== undefined && Number(q.points) <= 0) {
+    if (!Number.isFinite(q.points) || q.points <= 0) {
       throw new Error(`Question #${idx + 1} points must be greater than 0.`);
     }
   });
+}
 
-  return parsed.map((q) => ({
-    text: q.text.trim(),
-    options: q.options.map((o) => String(o).trim()),
-    correctIndex: Number(q.correctIndex),
-    points: Number(q.points || 1)
-  }));
+function refreshQuestionTitles() {
+  const items = questionBuilder.querySelectorAll(".builder-item");
+  items.forEach((item, idx) => {
+    const title = item.querySelector(".builder-title");
+    if (title) title.textContent = `Question ${idx + 1}`;
+  });
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function addQuestionBuilderItem(data = null) {
+  const q = data ? normalizeQuestionShape(data) : { text: "", options: ["", "", "", ""], correctIndex: 0, points: 1 };
+
+  const item = document.createElement("div");
+  item.className = "builder-item";
+  item.innerHTML = `
+    <div class="builder-head">
+      <h3 class="builder-title">Question</h3>
+      <button type="button" class="btn btn-danger btn-sm builder-remove">Remove</button>
+    </div>
+    <div class="field">
+      <label>Question Text</label>
+      <input type="text" class="q-text" value="${escapeHtml(q.text)}" placeholder="Write your question" />
+    </div>
+    <div class="builder-options">
+      <div class="field"><label>Option 1</label><input type="text" class="q-option" value="${escapeHtml(q.options[0] || "")}" /></div>
+      <div class="field"><label>Option 2</label><input type="text" class="q-option" value="${escapeHtml(q.options[1] || "")}" /></div>
+      <div class="field"><label>Option 3</label><input type="text" class="q-option" value="${escapeHtml(q.options[2] || "")}" /></div>
+      <div class="field"><label>Option 4</label><input type="text" class="q-option" value="${escapeHtml(q.options[3] || "")}" /></div>
+    </div>
+    <div class="builder-meta">
+      <div class="field">
+        <label>Correct Option</label>
+        <select class="q-correct-index">
+          <option value="0">Option 1</option>
+          <option value="1">Option 2</option>
+          <option value="2">Option 3</option>
+          <option value="3">Option 4</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Points</label>
+        <input type="number" class="q-points" min="1" value="${Number(q.points || 1)}" />
+      </div>
+    </div>
+  `;
+
+  item.querySelector(".q-correct-index").value = String(Number.isInteger(q.correctIndex) ? q.correctIndex : 0);
+  item.querySelector(".builder-remove").addEventListener("click", () => {
+    item.remove();
+    if (!questionBuilder.querySelector(".builder-item")) {
+      addQuestionBuilderItem();
+    }
+    refreshQuestionTitles();
+  });
+
+  questionBuilder.appendChild(item);
+  refreshQuestionTitles();
+}
+
+function getQuestionsFromBuilder() {
+  const items = [...questionBuilder.querySelectorAll(".builder-item")];
+  const questions = items.map((item) => {
+    const text = item.querySelector(".q-text").value.trim();
+    const options = [...item.querySelectorAll(".q-option")]
+      .map((input) => input.value.trim())
+      .filter(Boolean);
+    const correctIndex = Number(item.querySelector(".q-correct-index").value);
+    const points = Number(item.querySelector(".q-points").value || 1);
+    return { text, options, correctIndex, points };
+  });
+
+  const hasAnyContent = questions.some((q) => q.text || q.options.length > 0);
+  if (!hasAnyContent) return [];
+
+  validateQuestions(questions);
+  return questions;
+}
+
+function loadQuestionsInBuilder(questions) {
+  questionBuilder.innerHTML = "";
+  const list = Array.isArray(questions) ? questions : [];
+
+  if (!list.length) {
+    addQuestionBuilderItem();
+    return;
+  }
+
+  list.forEach((question) => addQuestionBuilderItem(question));
 }
 
 function renderAdminList(exams) {
@@ -167,7 +253,7 @@ function renderAdminList(exams) {
       document.getElementById("duration").value = exam.duration || "";
       document.getElementById("description").value = exam.description || "";
       document.getElementById("downloadLink").value = exam.downloadLink || "";
-      document.getElementById("questionsJson").value = JSON.stringify(exam.questions || [], null, 2);
+      loadQuestionsInBuilder(exam.questions || []);
       setFeedback("Editing mode enabled.");
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -252,7 +338,6 @@ examForm.addEventListener("submit", async (e) => {
   const duration = document.getElementById("duration").value.trim();
   const description = document.getElementById("description").value.trim();
   const downloadLink = document.getElementById("downloadLink").value.trim();
-  const questionsRaw = document.getElementById("questionsJson").value;
 
   if (!title || !subject || !dateInput || !duration || !description) {
     setFeedback("Please fill all required fields.", true);
@@ -267,7 +352,7 @@ examForm.addEventListener("submit", async (e) => {
 
   let questions;
   try {
-    questions = parseQuestionsJson(questionsRaw);
+    questions = getQuestionsFromBuilder().map(normalizeQuestionShape);
   } catch (error) {
     setFeedback(error.message, true);
     return;
@@ -324,6 +409,11 @@ onAuthStateChanged(auth, (user) => {
 });
 
 bootTheme();
+addQuestionBuilderItem();
+
+if (addQuestionBtn) {
+  addQuestionBtn.addEventListener("click", () => addQuestionBuilderItem());
+}
 
 themeToggle.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme");
