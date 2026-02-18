@@ -13,7 +13,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut
-} from "./firebase-client.js";
+} from "./firebase-client.js?v=20260218";
 
 const authCard = document.getElementById("authCard");
 const adminPanel = document.getElementById("adminPanel");

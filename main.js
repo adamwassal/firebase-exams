@@ -7,7 +7,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp
-} from "./js/firebase-client.js";
+} from "./js/firebase-client.js?v=20260218";
 
 const cardsGrid = document.getElementById("cardsGrid");
 const loadingState = document.getElementById("loadingState");
@@ -148,6 +148,13 @@ function openExamModal(exam) {
   examModal.classList.remove("hidden");
 }
 
+function prefillCandidate(name, email) {
+  const nameInput = document.getElementById("candidateName");
+  const emailInput = document.getElementById("candidateEmail");
+  if (nameInput) nameInput.value = name || "";
+  if (emailInput) emailInput.value = email || "";
+}
+
 function closeExam() {
   examModal.classList.add("hidden");
   selectedExamForTest = null;
@@ -267,7 +274,16 @@ registerForm.addEventListener("submit", async (e) => {
     });
 
     registerFeedback.textContent = "Registration saved successfully.";
-    setTimeout(closeRegister, 650);
+    const examToStart = selectedExamForRegistration;
+    const hasQuestions = Array.isArray(examToStart.questions) && examToStart.questions.length > 0;
+    closeRegister();
+
+    if (hasQuestions) {
+      openExamModal(examToStart);
+      prefillCandidate(fullName, email);
+    } else {
+      alert("Registration completed. This exam has no online questions yet.");
+    }
   } catch (error) {
     console.error(error);
     registerFeedback.textContent = "Failed to save registration.";
