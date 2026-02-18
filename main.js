@@ -1,8 +1,8 @@
 import {
-  db,
-  collection,
   addDoc,
   examsCollection,
+  registrationsCollection,
+  attemptsCollection,
   query,
   orderBy,
   onSnapshot,
@@ -34,9 +34,6 @@ const examResult = document.getElementById("examResult");
 let allExams = [];
 let selectedExamForRegistration = null;
 let selectedExamForTest = null;
-
-const registrationsCollection = collection(db, "examRegistrations");
-const attemptsCollection = collection(db, "examAttempts");
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);

@@ -63,6 +63,13 @@ function setFeedback(message, isError = false) {
   formFeedback.style.color = isError ? "#b91c1c" : "";
 }
 
+function formatFirebaseError(error, fallback) {
+  if (!error) return fallback;
+  const code = error.code ? ` (${error.code})` : "";
+  const message = error.message ? `: ${error.message}` : "";
+  return `${fallback}${code}${message}`;
+}
+
 function resetFormMode() {
   editingId.value = "";
   formTitle.textContent = "Create Exam";
@@ -174,7 +181,7 @@ function renderAdminList(exams) {
         setFeedback("Exam deleted successfully.");
       } catch (error) {
         console.error(error);
-        setFeedback("Failed to delete exam.", true);
+        setFeedback(formatFirebaseError(error, "Failed to delete exam"), true);
       }
     });
 
@@ -194,7 +201,7 @@ function watchExams() {
     },
     (error) => {
       console.error(error);
-      setFeedback("Could not load exams list. Check Firestore rules/index.", true);
+      setFeedback(formatFirebaseError(error, "Could not load exams list"), true);
       adminLoading.classList.add("hidden");
     }
   );
@@ -218,7 +225,7 @@ loginForm.addEventListener("submit", async (e) => {
     loginForm.reset();
   } catch (error) {
     console.error(error);
-    showAuthError("Login failed. Check credentials.");
+    showAuthError(formatFirebaseError(error, "Login failed"));
   }
 });
 
@@ -227,7 +234,7 @@ logoutBtn.addEventListener("click", async () => {
     await signOut(auth);
   } catch (error) {
     console.error(error);
-    showAuthError("Logout failed.");
+    showAuthError(formatFirebaseError(error, "Logout failed"));
   }
 });
 
@@ -292,7 +299,7 @@ examForm.addEventListener("submit", async (e) => {
     resetFormMode();
   } catch (error) {
     console.error(error);
-    setFeedback("Save failed. Check auth/rules.", true);
+    setFeedback(formatFirebaseError(error, "Save failed"), true);
   }
 });
 

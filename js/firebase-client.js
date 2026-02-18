@@ -25,12 +25,15 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 const examsCollection = collection(db, "exams");
+const registrationsCollection = collection(db, "examRegistrations");
+const attemptsCollection = collection(db, "examAttempts");
 
 export {
   auth,
   db,
-  collection,
   examsCollection,
+  registrationsCollection,
+  attemptsCollection,
   doc,
   addDoc,
   updateDoc,
