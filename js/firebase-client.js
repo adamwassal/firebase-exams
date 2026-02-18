@@ -29,6 +29,7 @@ const examsCollection = collection(db, "exams");
 export {
   auth,
   db,
+  collection,
   examsCollection,
   doc,
   addDoc,

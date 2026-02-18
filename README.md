@@ -30,7 +30,9 @@ firebase-exams/
 - Loading, empty, and error states.
 - Responsive glass UI + dark mode toggle.
 - Auth-protected admin CRUD (email/password).
-- Firestore rules: public read, authenticated write.
+- Exam registration from public website.
+- Online exam taking with instant grading and score submission.
+- Firestore rules: public read, authenticated exam writes.
 
 ## Firestore Data Model
 
@@ -44,6 +46,17 @@ Each document includes:
 - `description` (string)
 - `downloadLink` (optional string)
 - `createdAt` (timestamp)
+- `questions` (array, optional for online exam)
+  - `text` (string)
+  - `options` (string[])
+  - `correctIndex` (number)
+  - `points` (number)
+
+Collection: `examRegistrations`
+- `examId`, `examTitle`, `fullName`, `email`, `phone`, `registeredAt`
+
+Collection: `examAttempts`
+- `examId`, `examTitle`, `candidateName`, `candidateEmail`, `score`, `total`, `answers`, `submittedAt`
 
 ## Firebase Setup
 
@@ -73,6 +86,16 @@ service cloud.firestore {
     match /exams/{examId} {
       allow read: if true;
       allow create, update, delete: if request.auth != null;
+    }
+
+    match /examRegistrations/{registrationId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null;
+    }
+
+    match /examAttempts/{attemptId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null;
     }
   }
 }

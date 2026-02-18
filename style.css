@@ -310,3 +310,73 @@ html[data-theme="dark"] .btn-ghost {
     align-items: flex-start;
   }
 }
+
+.card-actions {
+  flex-wrap: wrap;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 100;
+}
+
+.modal-card {
+  width: min(680px, 96vw);
+  padding: 18px;
+}
+
+.modal-wide {
+  width: min(860px, 98vw);
+  max-height: 88vh;
+  overflow: auto;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.question-list {
+  display: grid;
+  gap: 10px;
+}
+
+.question-item {
+  border: 1px solid rgba(120, 130, 160, 0.25);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.question-item h3 {
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
+
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.result-box {
+  margin-top: 12px;
+  border: 1px solid rgba(21, 94, 239, 0.3);
+  background: rgba(21, 94, 239, 0.1);
+  border-radius: 12px;
+  padding: 10px;
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

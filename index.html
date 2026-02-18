@@ -16,7 +16,7 @@
   <header class="shell topbar glass">
     <div>
       <h1>Exam Display System</h1>
-      <p class="muted">Live updates from Firestore</p>
+      <p class="muted">Live updates + online exam mode</p>
     </div>
     <button id="themeToggle" class="btn btn-ghost" aria-label="Toggle dark mode">Toggle Theme</button>
   </header>
@@ -42,6 +42,61 @@
     <section id="cardsGrid" class="cards-grid hidden" aria-live="polite"></section>
   </main>
 
+  <section id="registerModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card glass">
+      <h2>Exam Registration</h2>
+      <p id="registerExamTitle" class="muted"></p>
+      <form id="registerForm" class="stack">
+        <div class="field">
+          <label for="regName">Full Name</label>
+          <input id="regName" type="text" required />
+        </div>
+        <div class="field">
+          <label for="regEmail">Email</label>
+          <input id="regEmail" type="email" required />
+        </div>
+        <div class="field">
+          <label for="regPhone">Phone (optional)</label>
+          <input id="regPhone" type="text" />
+        </div>
+        <div class="row-actions">
+          <button type="submit" class="btn btn-primary">Confirm Registration</button>
+          <button type="button" id="closeRegisterModal" class="btn btn-ghost">Cancel</button>
+        </div>
+        <p id="registerFeedback" class="muted"></p>
+      </form>
+    </div>
+  </section>
+
+  <section id="examModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card glass modal-wide">
+      <h2 id="examModalTitle">Online Exam</h2>
+      <p class="muted">Answer all questions then submit for instant grading.</p>
+
+      <form id="onlineExamForm" class="stack">
+        <div class="grid-2">
+          <div class="field">
+            <label for="candidateName">Your Name</label>
+            <input id="candidateName" name="candidateName" type="text" required />
+          </div>
+          <div class="field">
+            <label for="candidateEmail">Your Email</label>
+            <input id="candidateEmail" name="candidateEmail" type="email" required />
+          </div>
+        </div>
+
+        <div id="questionList" class="question-list"></div>
+
+        <div class="row-actions">
+          <button type="submit" class="btn btn-primary">Submit Exam</button>
+          <button type="button" id="closeExamModal" class="btn btn-ghost">Close</button>
+        </div>
+      </form>
+
+      <div id="examResult" class="result-box hidden"></div>
+    </div>
+  </section>
+
   <template id="examCardTemplate">
     <article class="exam-card glass">
       <div class="exam-card-head">
@@ -53,7 +108,11 @@
       <div class="meta-row">
         <span data-role="duration"></span>
       </div>
-      <a class="btn btn-primary hidden" data-role="download" target="_blank" rel="noopener">Download</a>
+      <div class="row-actions card-actions">
+        <button class="btn btn-primary" data-role="register">Register</button>
+        <button class="btn btn-ghost" data-role="startExam">Start Online Exam</button>
+        <a class="btn btn-primary hidden" data-role="download" target="_blank" rel="noopener">Download</a>
+      </div>
     </article>
   </template>
 

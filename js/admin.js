@@ -31,7 +31,6 @@ const adminEmpty = document.getElementById("adminEmpty");
 const adminItemTemplate = document.getElementById("adminItemTemplate");
 const themeToggle = document.getElementById("themeToggle");
 
-let examsCache = [];
 let unsubscribeExams = null;
 
 function setTheme(theme) {
@@ -85,6 +84,52 @@ function toDatetimeLocal(ts) {
   return local.toISOString().slice(0, 16);
 }
 
+function parseQuestionsJson(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return [];
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Questions JSON is not valid JSON.");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("Questions JSON must be an array.");
+  }
+
+  parsed.forEach((q, idx) => {
+    if (!q || typeof q !== "object") {
+      throw new Error(`Question #${idx + 1} must be an object.`);
+    }
+
+    if (!q.text || typeof q.text !== "string") {
+      throw new Error(`Question #${idx + 1} is missing text.`);
+    }
+
+    if (!Array.isArray(q.options) || q.options.length < 2) {
+      throw new Error(`Question #${idx + 1} must have at least 2 options.`);
+    }
+
+    const correctIndex = Number(q.correctIndex);
+    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= q.options.length) {
+      throw new Error(`Question #${idx + 1} has invalid correctIndex.`);
+    }
+
+    if (q.points !== undefined && Number(q.points) <= 0) {
+      throw new Error(`Question #${idx + 1} points must be greater than 0.`);
+    }
+  });
+
+  return parsed.map((q) => ({
+    text: q.text.trim(),
+    options: q.options.map((o) => String(o).trim()),
+    correctIndex: Number(q.correctIndex),
+    points: Number(q.points || 1)
+  }));
+}
+
 function renderAdminList(exams) {
   adminList.innerHTML = "";
   adminLoading.classList.add("hidden");
@@ -101,7 +146,8 @@ function renderAdminList(exams) {
     node.querySelector('[data-role="title"]').textContent = exam.title || "Untitled";
 
     const dateText = exam.date?.toDate ? exam.date.toDate().toLocaleString() : "No date";
-    node.querySelector('[data-role="meta"]').textContent = `${exam.subject || "General"} • ${dateText}`;
+    const questionCount = Array.isArray(exam.questions) ? exam.questions.length : 0;
+    node.querySelector('[data-role="meta"]').textContent = `${exam.subject || "General"} • ${dateText} • ${questionCount} Q`;
 
     node.querySelector('[data-action="edit"]').addEventListener("click", () => {
       editingId.value = exam.id;
@@ -114,6 +160,7 @@ function renderAdminList(exams) {
       document.getElementById("duration").value = exam.duration || "";
       document.getElementById("description").value = exam.description || "";
       document.getElementById("downloadLink").value = exam.downloadLink || "";
+      document.getElementById("questionsJson").value = JSON.stringify(exam.questions || [], null, 2);
       setFeedback("Editing mode enabled.");
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -136,20 +183,14 @@ function renderAdminList(exams) {
 }
 
 function watchExams() {
-  if (unsubscribeExams) {
-    unsubscribeExams();
-  }
+  if (unsubscribeExams) unsubscribeExams();
 
   const q = query(examsCollection, orderBy("date", "desc"));
-
   unsubscribeExams = onSnapshot(
     q,
     (snapshot) => {
-      examsCache = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      }));
-      renderAdminList(examsCache);
+      const exams = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      renderAdminList(exams);
     },
     (error) => {
       console.error(error);
@@ -204,6 +245,7 @@ examForm.addEventListener("submit", async (e) => {
   const duration = document.getElementById("duration").value.trim();
   const description = document.getElementById("description").value.trim();
   const downloadLink = document.getElementById("downloadLink").value.trim();
+  const questionsRaw = document.getElementById("questionsJson").value;
 
   if (!title || !subject || !dateInput || !duration || !description) {
     setFeedback("Please fill all required fields.", true);
@@ -216,13 +258,23 @@ examForm.addEventListener("submit", async (e) => {
     return;
   }
 
+  let questions;
+  try {
+    questions = parseQuestionsJson(questionsRaw);
+  } catch (error) {
+    setFeedback(error.message, true);
+    return;
+  }
+
   const payload = {
     title,
     subject,
     date,
     duration,
     description,
-    downloadLink: downloadLink || ""
+    downloadLink: downloadLink || "",
+    questions,
+    hasOnlineExam: questions.length > 0
   };
 
   try {

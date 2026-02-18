@@ -16,7 +16,7 @@
   <header class="shell topbar glass">
     <div>
       <h1>Exams Admin</h1>
-      <p class="muted">Authenticated write access only</p>
+      <p class="muted">Create exams, manage questions, track online readiness</p>
     </div>
     <div class="topbar-actions">
       <button id="themeToggle" class="btn btn-ghost" aria-label="Toggle dark mode">Toggle Theme</button>
@@ -69,12 +69,24 @@
 
           <div class="field">
             <label for="description">Description</label>
-            <textarea id="description" name="description" rows="4" maxlength="500" required></textarea>
+            <textarea id="description" name="description" rows="3" maxlength="500" required></textarea>
           </div>
 
           <div class="field">
             <label for="downloadLink">Download Link (optional)</label>
             <input id="downloadLink" name="downloadLink" type="url" placeholder="https://..." />
+          </div>
+
+          <div class="field">
+            <label for="questionsJson">Questions JSON (for online exam)</label>
+            <textarea id="questionsJson" rows="8" placeholder='[
+  {
+    "text": "What is 2 + 2?",
+    "options": ["3", "4", "5"],
+    "correctIndex": 1,
+    "points": 1
+  }
+]'></textarea>
           </div>
 
           <div class="row-actions">
