@@ -2,12 +2,11 @@ import {
   addDoc,
   examsCollection,
   registrationsCollection,
-  attemptsCollection,
   query,
   orderBy,
   onSnapshot,
   serverTimestamp
-} from "./js/firebase-client.js?v=20260218b";
+} from "./js/firebase-client.js?v=20260218c";
 
 const cardsGrid = document.getElementById("cardsGrid");
 const loadingState = document.getElementById("loadingState");
@@ -24,16 +23,8 @@ const registerForm = document.getElementById("registerForm");
 const closeRegisterModal = document.getElementById("closeRegisterModal");
 const registerFeedback = document.getElementById("registerFeedback");
 
-const examModal = document.getElementById("examModal");
-const examModalTitle = document.getElementById("examModalTitle");
-const onlineExamForm = document.getElementById("onlineExamForm");
-const questionList = document.getElementById("questionList");
-const closeExamModal = document.getElementById("closeExamModal");
-const examResult = document.getElementById("examResult");
-
 let allExams = [];
 let selectedExamForRegistration = null;
-let selectedExamForTest = null;
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -57,6 +48,13 @@ function formatDate(ts) {
 
 function normalize(str) {
   return String(str || "").toLowerCase().trim();
+}
+
+function buildExamUrl(examId, name = "", email = "") {
+  const params = new URLSearchParams({ examId });
+  if (name) params.set("name", name);
+  if (email) params.set("email", email);
+  return `./exam.html?${params.toString()}`;
 }
 
 function renderSubjects(exams) {
@@ -108,88 +106,6 @@ function closeRegister() {
   selectedExamForRegistration = null;
 }
 
-function renderExamQuestions(exam) {
-  questionList.innerHTML = "";
-  const questions = Array.isArray(exam.questions) ? exam.questions : [];
-
-  questions.forEach((q, idx) => {
-    const wrap = document.createElement("article");
-    wrap.className = "question-item";
-
-    const title = document.createElement("h3");
-    title.textContent = `${idx + 1}. ${q.text || "Question"}`;
-    wrap.appendChild(title);
-
-    const options = Array.isArray(q.options) ? q.options : [];
-    options.forEach((opt, optIdx) => {
-      const label = document.createElement("label");
-      label.className = "option-row";
-      label.innerHTML = `<input type="radio" name="answer_${idx}" value="${optIdx}" required> <span>${opt}</span>`;
-      wrap.appendChild(label);
-    });
-
-    questionList.appendChild(wrap);
-  });
-}
-
-function openExamModal(exam) {
-  const questions = Array.isArray(exam.questions) ? exam.questions : [];
-  if (!questions.length) {
-    alert("This exam has no online questions yet.");
-    return;
-  }
-
-  selectedExamForTest = exam;
-  examModalTitle.textContent = `${exam.title || "Exam"} - Online Test`;
-  onlineExamForm.reset();
-  examResult.classList.add("hidden");
-  examResult.textContent = "";
-  renderExamQuestions(exam);
-  examModal.classList.remove("hidden");
-}
-
-function prefillCandidate(name, email) {
-  const nameInput = document.getElementById("candidateName");
-  const emailInput = document.getElementById("candidateEmail");
-  if (nameInput) nameInput.value = name || "";
-  if (emailInput) emailInput.value = email || "";
-}
-
-function closeExam() {
-  examModal.classList.add("hidden");
-  selectedExamForTest = null;
-  questionList.innerHTML = "";
-}
-
-function calculateScore(exam, formData) {
-  const questions = Array.isArray(exam.questions) ? exam.questions : [];
-  let score = 0;
-  let total = 0;
-  const answers = [];
-
-  questions.forEach((q, idx) => {
-    const points = Number(q.points || 1);
-    total += points;
-
-    const raw = formData.get(`answer_${idx}`);
-    const selectedIndex = raw === null ? -1 : Number(raw);
-    const correctIndex = Number(q.correctIndex ?? q.correctindex ?? q.correct_answer_index);
-    const isCorrect = selectedIndex === correctIndex;
-
-    if (isCorrect) score += points;
-
-    answers.push({
-      questionIndex: idx,
-      selectedIndex,
-      correctIndex,
-      isCorrect,
-      points
-    });
-  });
-
-  return { score, total, answers };
-}
-
 function renderCards(exams) {
   cardsGrid.innerHTML = "";
 
@@ -205,19 +121,24 @@ function renderCards(exams) {
   exams.forEach((exam) => {
     const node = examCardTemplate.content.firstElementChild.cloneNode(true);
 
+    const questions = Array.isArray(exam.questions) ? exam.questions : [];
+    const hasQuestions = questions.length > 0;
+
     node.querySelector('[data-role="subject"]').textContent = exam.subject || "General";
     node.querySelector('[data-role="date"]').textContent = formatDate(exam.date);
     node.querySelector('[data-role="title"]').textContent = exam.title || "Untitled exam";
     node.querySelector('[data-role="description"]').textContent = exam.description || "No description provided.";
     node.querySelector('[data-role="duration"]').textContent = `Duration: ${exam.duration || "N/A"}`;
+    node.querySelector('[data-role="questionCount"]').textContent = `${questions.length} Questions`;
 
     node.querySelector('[data-role="register"]').addEventListener("click", () => openRegisterModal(exam));
-    node.querySelector('[data-role="startExam"]').addEventListener("click", () => openExamModal(exam));
 
-    const hasQuestions = Array.isArray(exam.questions) && exam.questions.length > 0;
+    const startLink = node.querySelector('[data-role="startExam"]');
+    startLink.href = buildExamUrl(exam.id);
     if (!hasQuestions) {
-      node.querySelector('[data-role="startExam"]').disabled = true;
-      node.querySelector('[data-role="startExam"]').textContent = "No Online Questions";
+      startLink.classList.add("disabled-link");
+      startLink.removeAttribute("href");
+      startLink.textContent = "No Questions Yet";
     }
 
     const downloadBtn = node.querySelector('[data-role="download"]');
@@ -273,14 +194,13 @@ registerForm.addEventListener("submit", async (e) => {
       registeredAt: serverTimestamp()
     });
 
-    registerFeedback.textContent = "Registration saved successfully.";
     const examToStart = selectedExamForRegistration;
     const hasQuestions = Array.isArray(examToStart.questions) && examToStart.questions.length > 0;
+
     closeRegister();
 
     if (hasQuestions) {
-      openExamModal(examToStart);
-      prefillCandidate(fullName, email);
+      window.location.href = buildExamUrl(examToStart.id, fullName, email);
     } else {
       alert("Registration completed. This exam has no online questions yet.");
     }
@@ -290,52 +210,9 @@ registerForm.addEventListener("submit", async (e) => {
   }
 });
 
-onlineExamForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  if (!selectedExamForTest) return;
-
-  const formData = new FormData(onlineExamForm);
-  const candidateName = String(formData.get("candidateName") || "").trim();
-  const candidateEmail = String(formData.get("candidateEmail") || "").trim();
-
-  if (!candidateName || !candidateEmail) {
-    examResult.textContent = "Name and email are required.";
-    examResult.classList.remove("hidden");
-    return;
-  }
-
-  const { score, total, answers } = calculateScore(selectedExamForTest, formData);
-
-  try {
-    await addDoc(attemptsCollection, {
-      examId: selectedExamForTest.id,
-      examTitle: selectedExamForTest.title || "",
-      candidateName,
-      candidateEmail,
-      score,
-      total,
-      answers,
-      submittedAt: serverTimestamp()
-    });
-
-    examResult.textContent = `Result: ${score} / ${total}`;
-    examResult.classList.remove("hidden");
-  } catch (error) {
-    console.error(error);
-    examResult.textContent = "Could not submit attempt. Please try again.";
-    examResult.classList.remove("hidden");
-  }
-});
-
 closeRegisterModal.addEventListener("click", closeRegister);
-closeExamModal.addEventListener("click", closeExam);
-
 registerModal.addEventListener("click", (e) => {
   if (e.target === registerModal) closeRegister();
-});
-
-examModal.addEventListener("click", (e) => {
-  if (e.target === examModal) closeExam();
 });
 
 searchInput.addEventListener("input", applyFilters);

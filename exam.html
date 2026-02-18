@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Online Exam</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+
+  <header class="shell topbar glass">
+    <div>
+      <h1 id="examTitle">Online Exam</h1>
+      <p id="examSubtitle" class="muted">Loading exam details...</p>
+    </div>
+    <div class="row-actions">
+      <a href="./index.html" class="btn btn-ghost">Back To Exams</a>
+      <button id="themeToggle" class="btn btn-ghost" aria-label="Toggle dark mode">Toggle Theme</button>
+    </div>
+  </header>
+
+  <main class="shell page-gap">
+    <section id="examLoading" class="state glass">Loading exam...</section>
+    <section id="examError" class="state glass hidden"></section>
+
+    <section id="examPanel" class="glass panel hidden">
+      <form id="candidateForm" class="stack compact-form">
+        <div class="grid-2">
+          <div class="field">
+            <label for="candidateName">Full Name</label>
+            <input id="candidateName" name="candidateName" type="text" required />
+          </div>
+          <div class="field">
+            <label for="candidateEmail">Email</label>
+            <input id="candidateEmail" name="candidateEmail" type="email" required />
+          </div>
+        </div>
+      </form>
+
+      <form id="examForm" class="stack">
+        <div id="questionList" class="question-list"></div>
+        <div class="row-actions">
+          <button id="submitBtn" class="btn btn-primary" type="submit">Submit Exam</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="resultBox" class="glass panel hidden"></section>
+  </main>
+
+  <script type="module" src="./exam.js?v=20260218c"></script>
+</body>
+</html>
