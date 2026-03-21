@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="ar" dir="rtl" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Online Exam</title>
+  <title>الاختبار الإلكتروني</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -15,29 +15,44 @@
 
   <header class="shell topbar glass">
     <div>
-      <h1 id="examTitle">Online Exam</h1>
-      <p id="examSubtitle" class="muted">Loading exam details...</p>
+      <h1 id="examTitle">الاختبار الإلكتروني</h1>
+      <p id="examSubtitle" class="muted">جارٍ تحميل تفاصيل الاختبار...</p>
     </div>
     <div class="row-actions">
-      <a href="./index.html" class="btn btn-ghost">Back To Exams</a>
-      <button id="themeToggle" class="btn btn-ghost" aria-label="Toggle dark mode">Toggle Theme</button>
+      <a id="backToExamsLink" href="./index.html" class="btn btn-ghost">العودة إلى الاختبارات</a>
+      <button id="themeToggle" class="btn btn-ghost" aria-label="تبديل المظهر">تبديل المظهر</button>
     </div>
   </header>
 
   <main class="shell page-gap">
-    <section id="examLoading" class="state glass">Loading exam...</section>
+    <section id="examLoading" class="state glass">جارٍ تحميل الاختبار...</section>
     <section id="examError" class="state glass hidden"></section>
 
     <section id="examPanel" class="glass panel hidden">
+      <section class="exam-status-grid">
+        <article class="status-card status-card-accent">
+          <p class="status-label">الوقت المتبقي</p>
+          <h2 id="timerDisplay">--:--</h2>
+          <p id="timerHint" class="muted">سيظهر المؤقت بعد تحميل مدة الاختبار.</p>
+        </article>
+        <article class="status-card">
+          <p class="status-label">تقدّمك</p>
+          <div class="progress-track" aria-hidden="true">
+            <div id="timerProgress" class="progress-bar"></div>
+          </div>
+          <p id="progressText" class="muted">أجب عن جميع الأسئلة ثم أرسل الحل.</p>
+        </article>
+      </section>
+
       <form id="candidateForm" class="stack compact-form">
         <div class="grid-2">
           <div class="field">
-            <label for="candidateName">Full Name</label>
+            <label for="candidateName">الاسم الكامل</label>
             <input id="candidateName" name="candidateName" type="text" required />
           </div>
           <div class="field">
-            <label for="candidateEmail">Email</label>
-            <input id="candidateEmail" name="candidateEmail" type="email" required />
+            <label for="candidatePhone">رقم الهاتف</label>
+            <input id="candidatePhone" name="candidatePhone" type="tel" required />
           </div>
         </div>
       </form>
@@ -45,7 +60,7 @@
       <form id="examForm" class="stack">
         <div id="questionList" class="question-list"></div>
         <div class="row-actions">
-          <button id="submitBtn" class="btn btn-primary" type="submit">Submit Exam</button>
+          <button id="submitBtn" class="btn btn-primary" type="submit">إرسال الإجابات</button>
         </div>
       </form>
     </section>

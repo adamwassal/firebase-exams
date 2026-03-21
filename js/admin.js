@@ -1,6 +1,7 @@
 import {
   auth,
   examsCollection,
+  attemptsCollection,
   doc,
   addDoc,
   updateDoc,
@@ -29,11 +30,16 @@ const adminList = document.getElementById("adminList");
 const adminLoading = document.getElementById("adminLoading");
 const adminEmpty = document.getElementById("adminEmpty");
 const adminItemTemplate = document.getElementById("adminItemTemplate");
+const attemptsList = document.getElementById("attemptsList");
+const attemptsLoading = document.getElementById("attemptsLoading");
+const attemptsEmpty = document.getElementById("attemptsEmpty");
+const attemptItemTemplate = document.getElementById("attemptItemTemplate");
 const themeToggle = document.getElementById("themeToggle");
 const questionBuilder = document.getElementById("questionBuilder");
 const addQuestionBtn = document.getElementById("addQuestionBtn");
 
 let unsubscribeExams = null;
+let unsubscribeAttempts = null;
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -74,9 +80,10 @@ function formatFirebaseError(error, fallback) {
 
 function resetFormMode() {
   editingId.value = "";
-  formTitle.textContent = "Create Exam";
+  formTitle.textContent = "إنشاء اختبار";
   cancelEditBtn.classList.add("hidden");
   examForm.reset();
+  document.getElementById("isEnabled").checked = false;
   questionBuilder.innerHTML = "";
   addQuestionBuilderItem();
 }
@@ -112,16 +119,16 @@ function normalizeQuestionShape(question) {
 function validateQuestions(questions) {
   questions.forEach((q, idx) => {
     if (!q.text) {
-      throw new Error(`Question #${idx + 1} is missing text.`);
+      throw new Error(`السؤال رقم ${idx + 1} يفتقد نص السؤال.`);
     }
     if (!Array.isArray(q.options) || q.options.length < 2) {
-      throw new Error(`Question #${idx + 1} must have at least 2 options.`);
+      throw new Error(`يجب أن يحتوي السؤال رقم ${idx + 1} على خيارين على الأقل.`);
     }
     if (!Number.isInteger(q.correctIndex) || q.correctIndex < 0 || q.correctIndex >= q.options.length) {
-      throw new Error(`Question #${idx + 1} has invalid correct answer.`);
+      throw new Error(`الإجابة الصحيحة في السؤال رقم ${idx + 1} غير صالحة.`);
     }
     if (!Number.isFinite(q.points) || q.points <= 0) {
-      throw new Error(`Question #${idx + 1} points must be greater than 0.`);
+      throw new Error(`يجب أن تكون درجة السؤال رقم ${idx + 1} أكبر من صفر.`);
     }
   });
 }
@@ -130,7 +137,7 @@ function refreshQuestionTitles() {
   const items = questionBuilder.querySelectorAll(".builder-item");
   items.forEach((item, idx) => {
     const title = item.querySelector(".builder-title");
-    if (title) title.textContent = `Question ${idx + 1}`;
+    if (title) title.textContent = `السؤال ${idx + 1}`;
   });
 }
 
@@ -149,31 +156,31 @@ function addQuestionBuilderItem(data = null) {
   item.className = "builder-item";
   item.innerHTML = `
     <div class="builder-head">
-      <h3 class="builder-title">Question</h3>
-      <button type="button" class="btn btn-danger btn-sm builder-remove">Remove</button>
+      <h3 class="builder-title">السؤال</h3>
+      <button type="button" class="btn btn-danger btn-sm builder-remove">حذف</button>
     </div>
     <div class="field">
-      <label>Question Text</label>
-      <input type="text" class="q-text" value="${escapeHtml(q.text)}" placeholder="Write your question" />
+      <label>نص السؤال</label>
+      <input type="text" class="q-text" value="${escapeHtml(q.text)}" placeholder="اكتب السؤال هنا" />
     </div>
     <div class="builder-options">
-      <div class="field"><label>Option 1</label><input type="text" class="q-option" value="${escapeHtml(q.options[0] || "")}" /></div>
-      <div class="field"><label>Option 2</label><input type="text" class="q-option" value="${escapeHtml(q.options[1] || "")}" /></div>
-      <div class="field"><label>Option 3</label><input type="text" class="q-option" value="${escapeHtml(q.options[2] || "")}" /></div>
-      <div class="field"><label>Option 4</label><input type="text" class="q-option" value="${escapeHtml(q.options[3] || "")}" /></div>
+      <div class="field"><label>الخيار 1</label><input type="text" class="q-option" value="${escapeHtml(q.options[0] || "")}" /></div>
+      <div class="field"><label>الخيار 2</label><input type="text" class="q-option" value="${escapeHtml(q.options[1] || "")}" /></div>
+      <div class="field"><label>الخيار 3</label><input type="text" class="q-option" value="${escapeHtml(q.options[2] || "")}" /></div>
+      <div class="field"><label>الخيار 4</label><input type="text" class="q-option" value="${escapeHtml(q.options[3] || "")}" /></div>
     </div>
     <div class="builder-meta">
       <div class="field">
-        <label>Correct Option</label>
+        <label>الخيار الصحيح</label>
         <select class="q-correct-index">
-          <option value="0">Option 1</option>
-          <option value="1">Option 2</option>
-          <option value="2">Option 3</option>
-          <option value="3">Option 4</option>
+          <option value="0">الخيار 1</option>
+          <option value="1">الخيار 2</option>
+          <option value="2">الخيار 3</option>
+          <option value="3">الخيار 4</option>
         </select>
       </div>
       <div class="field">
-        <label>Points</label>
+        <label>الدرجة</label>
         <input type="number" class="q-points" min="1" value="${Number(q.points || 1)}" />
       </div>
     </div>
@@ -236,15 +243,16 @@ function renderAdminList(exams) {
 
   exams.forEach((exam) => {
     const node = adminItemTemplate.content.firstElementChild.cloneNode(true);
-    node.querySelector('[data-role="title"]').textContent = exam.title || "Untitled";
+    node.querySelector('[data-role="title"]').textContent = exam.title || "بدون عنوان";
 
-    const dateText = exam.date?.toDate ? exam.date.toDate().toLocaleString() : "No date";
+    const dateText = exam.date?.toDate ? exam.date.toDate().toLocaleString("ar") : "بدون تاريخ";
     const questionCount = Array.isArray(exam.questions) ? exam.questions.length : 0;
-    node.querySelector('[data-role="meta"]').textContent = `${exam.subject || "General"} • ${dateText} • ${questionCount} Q`;
+    const statusText = exam.isEnabled ? "مفعّل" : "غير مفعّل";
+    node.querySelector('[data-role="meta"]').textContent = `${exam.subject || "عام"} • ${dateText} • ${questionCount} سؤال • ${statusText}`;
 
     node.querySelector('[data-action="edit"]').addEventListener("click", () => {
       editingId.value = exam.id;
-      formTitle.textContent = "Edit Exam";
+      formTitle.textContent = "تعديل الاختبار";
       cancelEditBtn.classList.remove("hidden");
 
       document.getElementById("title").value = exam.title || "";
@@ -253,25 +261,59 @@ function renderAdminList(exams) {
       document.getElementById("duration").value = exam.duration || "";
       document.getElementById("description").value = exam.description || "";
       document.getElementById("downloadLink").value = exam.downloadLink || "";
+      document.getElementById("isEnabled").checked = Boolean(exam.isEnabled);
       loadQuestionsInBuilder(exam.questions || []);
-      setFeedback("Editing mode enabled.");
+      setFeedback("تم تفعيل وضع التعديل.");
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
 
     node.querySelector('[data-action="delete"]').addEventListener("click", async () => {
-      const ok = window.confirm(`Delete exam \"${exam.title}\"?`);
+      const ok = window.confirm(`هل تريد حذف الاختبار "${exam.title}"؟`);
       if (!ok) return;
 
       try {
         await deleteDoc(doc(examsCollection, exam.id));
-        setFeedback("Exam deleted successfully.");
+        setFeedback("تم حذف الاختبار بنجاح.");
       } catch (error) {
         console.error(error);
-        setFeedback(formatFirebaseError(error, "Failed to delete exam"), true);
+        setFeedback(formatFirebaseError(error, "تعذر حذف الاختبار"), true);
       }
     });
 
     adminList.appendChild(node);
+  });
+}
+
+function formatAttemptDate(ts) {
+  if (!ts || typeof ts.toDate !== "function") return "بدون تاريخ";
+  return new Intl.DateTimeFormat("ar", { dateStyle: "medium", timeStyle: "short" }).format(ts.toDate());
+}
+
+function renderAttemptsList(attempts) {
+  attemptsList.innerHTML = "";
+  attemptsLoading.classList.add("hidden");
+
+  if (!attempts.length) {
+    attemptsEmpty.classList.remove("hidden");
+    return;
+  }
+
+  attemptsEmpty.classList.add("hidden");
+
+  attempts.forEach((attempt) => {
+    const node = attemptItemTemplate.content.firstElementChild.cloneNode(true);
+    const studentName = attempt.candidateName || "بدون اسم";
+    const studentPhone = attempt.candidatePhone || "بدون رقم";
+    const examName = attempt.examTitle || "اختبار بدون عنوان";
+    const score = Number.isFinite(Number(attempt.score)) ? Number(attempt.score) : 0;
+    const total = Number.isFinite(Number(attempt.total)) ? Number(attempt.total) : 0;
+
+    node.querySelector('[data-role="student"]').textContent = studentName;
+    node.querySelector('[data-role="exam"]').textContent = `الاختبار: ${examName}`;
+    node.querySelector('[data-role="meta"]').textContent = `رقم الهاتف: ${studentPhone} • ${formatAttemptDate(attempt.submittedAt)}`;
+    node.querySelector('[data-role="score"]').textContent = `${score} / ${total}`;
+
+    attemptsList.appendChild(node);
   });
 }
 
@@ -287,8 +329,27 @@ function watchExams() {
     },
     (error) => {
       console.error(error);
-      setFeedback(formatFirebaseError(error, "Could not load exams list"), true);
+      setFeedback(formatFirebaseError(error, "تعذر تحميل قائمة الاختبارات"), true);
       adminLoading.classList.add("hidden");
+    }
+  );
+}
+
+function watchAttempts() {
+  if (unsubscribeAttempts) unsubscribeAttempts();
+
+  const q = query(attemptsCollection, orderBy("submittedAt", "desc"));
+  unsubscribeAttempts = onSnapshot(
+    q,
+    (snapshot) => {
+      const attempts = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      renderAttemptsList(attempts);
+    },
+    (error) => {
+      console.error(error);
+      attemptsLoading.classList.add("hidden");
+      attemptsEmpty.classList.remove("hidden");
+      setFeedback(formatFirebaseError(error, "تعذر تحميل المحاولات المسلّمة"), true);
     }
   );
 }
@@ -302,7 +363,7 @@ loginForm.addEventListener("submit", async (e) => {
   const password = String(form.get("password") || "");
 
   if (!email || !password) {
-    showAuthError("Email and password are required.");
+    showAuthError("البريد الإلكتروني وكلمة المرور مطلوبان.");
     return;
   }
 
@@ -311,7 +372,7 @@ loginForm.addEventListener("submit", async (e) => {
     loginForm.reset();
   } catch (error) {
     console.error(error);
-    showAuthError(formatFirebaseError(error, "Login failed"));
+    showAuthError(formatFirebaseError(error, "فشل تسجيل الدخول"));
   }
 });
 
@@ -320,13 +381,13 @@ logoutBtn.addEventListener("click", async () => {
     await signOut(auth);
   } catch (error) {
     console.error(error);
-    showAuthError(formatFirebaseError(error, "Logout failed"));
+    showAuthError(formatFirebaseError(error, "فشل تسجيل الخروج"));
   }
 });
 
 cancelEditBtn.addEventListener("click", () => {
   resetFormMode();
-  setFeedback("Edit canceled.");
+  setFeedback("تم إلغاء التعديل.");
 });
 
 examForm.addEventListener("submit", async (e) => {
@@ -338,15 +399,16 @@ examForm.addEventListener("submit", async (e) => {
   const duration = document.getElementById("duration").value.trim();
   const description = document.getElementById("description").value.trim();
   const downloadLink = document.getElementById("downloadLink").value.trim();
+  const isEnabled = document.getElementById("isEnabled").checked;
 
   if (!title || !subject || !dateInput || !duration || !description) {
-    setFeedback("Please fill all required fields.", true);
+    setFeedback("يرجى تعبئة جميع الحقول المطلوبة.", true);
     return;
   }
 
   const date = parseDateInput(dateInput);
   if (!date) {
-    setFeedback("Invalid date value.", true);
+    setFeedback("قيمة التاريخ غير صالحة.", true);
     return;
   }
 
@@ -365,6 +427,7 @@ examForm.addEventListener("submit", async (e) => {
     duration,
     description,
     downloadLink: downloadLink || "",
+    isEnabled,
     questions,
     hasOnlineExam: questions.length > 0
   };
@@ -372,19 +435,19 @@ examForm.addEventListener("submit", async (e) => {
   try {
     if (editingId.value) {
       await updateDoc(doc(examsCollection, editingId.value), payload);
-      setFeedback("Exam updated successfully.");
+      setFeedback("تم تحديث الاختبار بنجاح.");
     } else {
       await addDoc(examsCollection, {
         ...payload,
         createdAt: serverTimestamp()
       });
-      setFeedback("Exam created successfully.");
+      setFeedback("تم إنشاء الاختبار بنجاح.");
     }
 
     resetFormMode();
   } catch (error) {
     console.error(error);
-    setFeedback(formatFirebaseError(error, "Save failed"), true);
+    setFeedback(formatFirebaseError(error, "فشل الحفظ"), true);
   }
 });
 
@@ -394,15 +457,23 @@ onAuthStateChanged(auth, (user) => {
     adminPanel.classList.remove("hidden");
     logoutBtn.classList.remove("hidden");
     watchExams();
+    watchAttempts();
   } else {
     if (unsubscribeExams) {
       unsubscribeExams();
       unsubscribeExams = null;
     }
+    if (unsubscribeAttempts) {
+      unsubscribeAttempts();
+      unsubscribeAttempts = null;
+    }
     authCard.classList.remove("hidden");
     adminPanel.classList.add("hidden");
     logoutBtn.classList.add("hidden");
     adminList.innerHTML = "";
+    attemptsList.innerHTML = "";
+    attemptsLoading.classList.remove("hidden");
+    attemptsEmpty.classList.add("hidden");
     resetFormMode();
     clearAuthError();
   }

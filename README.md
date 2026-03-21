@@ -1,12 +1,12 @@
-# Firebase Exams Display System
+# نظام عرض الاختبارات باستخدام Firebase
 
-Production-ready static exam display + admin system using:
+نظام جاهز للإنتاج لعرض الاختبارات وإدارتها باستخدام:
 - HTML
 - CSS
 - Vanilla JavaScript
 - Firebase Firestore + Firebase Auth
 
-## Folder Structure
+## هيكل المجلدات
 
 ```text
 firebase-exams/
@@ -23,61 +23,61 @@ firebase-exams/
     admin.js
 ```
 
-## Features
+## المميزات
 
-- Real-time exam display (`onSnapshot`) on public site.
-- Search + subject filter.
-- Loading, empty, and error states.
-- Responsive glass UI + dark mode toggle.
-- Auth-protected admin CRUD (email/password).
-- Exam registration from public website.
-- Online exam taking with instant grading and score submission.
-- Firestore rules: public read, authenticated exam writes.
+- عرض الاختبارات لحظيًا (`onSnapshot`) في الموقع العام.
+- البحث والتصفية حسب المادة.
+- حالات تحميل وفراغ وخطأ.
+- واجهة زجاجية متجاوبة مع تبديل المظهر الداكن.
+- لوحة إدارة محمية بتسجيل الدخول لإنشاء وتعديل وحذف الاختبارات.
+- تسجيل المتقدمين من الموقع العام.
+- أداء الاختبار إلكترونيًا مع التصحيح الفوري وحفظ النتيجة.
+- قواعد Firestore تسمح بالقراءة العامة وتقيّد التعديل للمستخدمين المصرح لهم.
 
-## Firestore Data Model
+## نموذج البيانات في Firestore
 
-Collection: `exams`
+المجموعة: `exams`
 
-Each document includes:
+كل مستند يحتوي على:
 - `title` (string)
 - `subject` (string)
 - `date` (timestamp)
 - `duration` (string)
 - `description` (string)
-- `downloadLink` (optional string)
+- `downloadLink` (نص اختياري)
 - `createdAt` (timestamp)
-- `questions` (array, optional for online exam)
-  - `text` (string)
-  - `options` (string[])
-  - `correctIndex` (number)
-  - `points` (number)
+- `questions` (مصفوفة، اختيارية للاختبار الإلكتروني)
+  - `text` (نص)
+  - `options` (مصفوفة نصوص)
+  - `correctIndex` (رقم)
+  - `points` (رقم)
 
-Collection: `examRegistrations`
+المجموعة: `examRegistrations`
 - `examId`, `examTitle`, `fullName`, `email`, `phone`, `registeredAt`
 
-Collection: `examAttempts`
+المجموعة: `examAttempts`
 - `examId`, `examTitle`, `candidateName`, `candidateEmail`, `score`, `total`, `answers`, `submittedAt`
 
-## Firebase Setup
+## إعداد Firebase
 
-1. Create a Firebase project.
-2. Enable Firestore Database.
-3. Enable Firebase Authentication -> Email/Password.
-4. Create at least one admin user in Authentication.
-5. Replace `config/firebase-config.js` values with your Firebase Web App config.
+1. أنشئ مشروع Firebase جديدًا.
+2. فعّل Firestore Database.
+3. فعّل Firebase Authentication ثم Email/Password.
+4. أنشئ مستخدم مشرف واحدًا على الأقل داخل Authentication.
+5. استبدل القيم في `config/firebase-config.js` بإعدادات تطبيق الويب الخاص بك.
 
-### Important Security Note About Firebase Config
+### ملاحظة أمنية مهمة حول إعدادات Firebase
 
-Firebase web config is not a secret in frontend apps and will be visible in browser source.
-Security must rely on:
-- Firestore Rules
-- Auth checks
-- Firebase App Check (optional)
-- API key restrictions in Google Cloud Console
+إعدادات Firebase في تطبيقات الواجهة الأمامية ليست سرية، وستكون ظاهرة في مصدر الصفحة.
+الحماية يجب أن تعتمد على:
+- قواعد Firestore
+- التحقق من تسجيل الدخول
+- Firebase App Check بشكل اختياري
+- تقييد مفتاح API من Google Cloud Console
 
-## Firestore Security Rules
+## قواعد أمان Firestore
 
-Use `firestore.rules` in this folder:
+استخدم ملف `firestore.rules` الموجود في هذا المجلد:
 
 ```rules
 rules_version = '2';
@@ -101,48 +101,48 @@ service cloud.firestore {
 }
 ```
 
-## Local Run
+## التشغيل المحلي
 
-Any static server works. Example with Python:
+يمكنك استخدام أي خادم ملفات ثابتة. مثال باستخدام Python:
 
 ```bash
 cd firebase-exams
 python3 -m http.server 5500
 ```
 
-Open:
-- `http://localhost:5500/index.html` (public)
-- `http://localhost:5500/admin.html` (admin)
+افتح:
+- `http://localhost:5500/index.html` (الواجهة العامة)
+- `http://localhost:5500/admin.html` (لوحة الإدارة)
 
-## GitHub Pages Deployment
+## النشر على GitHub Pages
 
-### Option A (Recommended): GitHub Actions + Secrets
+### الخيار A (مستحسن): GitHub Actions مع Secrets
 
-1. Commit everything including `.github/workflows/deploy-firebase-exams.yml`.
-2. In GitHub repo settings -> Secrets and variables -> Actions, add:
+1. نفّذ `commit` لكل الملفات بما فيها `.github/workflows/deploy-firebase-exams.yml`.
+2. من إعدادات المستودع في GitHub ثم `Secrets and variables` ثم `Actions` أضف:
    - `FIREBASE_API_KEY`
    - `FIREBASE_AUTH_DOMAIN`
    - `FIREBASE_PROJECT_ID`
    - `FIREBASE_STORAGE_BUCKET`
    - `FIREBASE_MESSAGING_SENDER_ID`
    - `FIREBASE_APP_ID`
-3. Push to `main`.
-4. Workflow deploys `firebase-exams/` to `gh-pages` automatically.
-5. In GitHub Settings -> Pages, set source to `gh-pages` branch.
+3. ادفع التغييرات إلى فرع `main`.
+4. سيقوم الـ workflow بنشر `firebase-exams/` إلى `gh-pages` تلقائيًا.
+5. من إعدادات GitHub ثم `Pages` اختر فرع `gh-pages` كمصدر للنشر.
 
-### Option B: Direct Commit Config
+### الخيار B: حفظ الإعدادات مباشرة في المستودع
 
-Put real values in `config/firebase-config.js`, commit, and deploy.
-This is simpler but exposes config in repo (still normal for Firebase web apps).
+ضع القيم الحقيقية في `config/firebase-config.js` ثم نفّذ `commit` وانشر المشروع.
+هذا الخيار أبسط، لكنه يجعل الإعدادات ظاهرة في المستودع، وهو أمر معتاد في تطبيقات Firebase للويب.
 
-## Real-time Behavior
+## التحديث اللحظي
 
-`index.html` uses Firestore `onSnapshot(query(orderBy('date', 'desc')))`.
-Any exam change in Firestore updates the deployed website immediately, without redeploy.
+يستخدم `index.html` الاستعلام `onSnapshot(query(orderBy('date', 'desc')))`.
+أي تعديل على الاختبارات داخل Firestore سيظهر مباشرة في الموقع المنشور دون الحاجة إلى إعادة نشر.
 
-## Production Hardening Checklist
+## قائمة تحسينات ما قبل الإنتاج
 
-- Restrict Firebase API key in Google Cloud Console.
-- Keep strict Firestore rules.
-- Optionally enable Firebase App Check.
-- Set up Firebase Alerts/Monitoring.
+- قيّد مفتاح Firebase API من Google Cloud Console.
+- حافظ على قواعد Firestore بشكل صارم.
+- فعّل Firebase App Check إذا احتجت لذلك.
+- أضف تنبيهات ومراقبة Firebase.

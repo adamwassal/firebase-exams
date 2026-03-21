@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="ar" dir="rtl" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Exams Portal</title>
+  <title>بوابة الاختبارات</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -15,58 +15,60 @@
 
   <header class="shell topbar glass">
     <div>
-      <h1>Exams Hub</h1>
-      <p class="muted">Browse exams, register, and start online tests in one click.</p>
+      <h1>منصة الاختبارات</h1>
+      <p class="muted">تصفّح الاختبارات، سجّل بياناتك، وابدأ الاختبار الإلكتروني بسهولة.</p>
     </div>
-    <button id="themeToggle" class="btn btn-ghost" aria-label="Toggle dark mode">Toggle Theme</button>
+    <button id="themeToggle" class="btn btn-ghost" aria-label="تبديل المظهر">تبديل المظهر</button>
   </header>
 
   <main class="shell page-gap">
     <section class="glass hero">
-      <h2>Online Exams Made Simple</h2>
-      <p class="muted">Choose your exam, register your details, and continue to a dedicated exam page.</p>
+      <p class="eyebrow">منصة تعليمية جاهزة للاستخدام</p>
+      <h2>الاختبارات الإلكترونية بشكل أوضح وأسرع</h2>
+      <p class="muted">تصفّح الاختبارات، راجع التفاصيل المهمة بسرعة، ثم سجّل وابدأ الاختبار من تجربة منظمة ومريحة.</p>
+      <div class="hero-highlights">
+        <div class="hero-chip">تصفية سريعة حسب المادة</div>
+        <div class="hero-chip">تسجيل قبل بدء الاختبار</div>
+        <div class="hero-chip">اختبارات إلكترونية بمدة محددة</div>
+      </div>
     </section>
 
     <section class="glass controls">
       <div class="field">
-        <label for="searchInput">Search</label>
-        <input id="searchInput" type="search" placeholder="Search by title, subject, or description" />
+        <label for="searchInput">البحث</label>
+        <input id="searchInput" type="search" placeholder="ابحث بالعنوان أو المادة أو الوصف" />
       </div>
       <div class="field">
-        <label for="subjectFilter">Subject</label>
+        <label for="subjectFilter">المادة</label>
         <select id="subjectFilter">
-          <option value="all">All subjects</option>
+          <option value="all">كل المواد</option>
         </select>
       </div>
     </section>
 
-    <section id="loadingState" class="state glass" aria-live="polite">Loading exams...</section>
+    <section id="loadingState" class="state glass" aria-live="polite">جارٍ تحميل الاختبارات...</section>
     <section id="errorState" class="state glass hidden" aria-live="assertive"></section>
-    <section id="emptyState" class="state glass hidden">No exams found.</section>
+    <section id="emptyState" class="state glass hidden">لا توجد اختبارات مطابقة.</section>
 
     <section id="cardsGrid" class="cards-grid hidden" aria-live="polite"></section>
   </main>
 
   <section id="registerModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card glass">
-      <h2>Exam Registration</h2>
+      <h2>تسجيل الاختبار</h2>
       <p id="registerExamTitle" class="muted"></p>
       <form id="registerForm" class="stack">
         <div class="field">
-          <label for="regName">Full Name</label>
+          <label for="regName">الاسم الكامل</label>
           <input id="regName" type="text" required />
         </div>
         <div class="field">
-          <label for="regEmail">Email</label>
-          <input id="regEmail" type="email" required />
-        </div>
-        <div class="field">
-          <label for="regPhone">Phone (optional)</label>
-          <input id="regPhone" type="text" />
+          <label for="regPhone">رقم الهاتف</label>
+          <input id="regPhone" type="tel" required />
         </div>
         <div class="row-actions">
-          <button type="submit" class="btn btn-primary">Register & Continue</button>
-          <button type="button" id="closeRegisterModal" class="btn btn-ghost">Cancel</button>
+          <button type="submit" class="btn btn-primary">تسجيل ومتابعة</button>
+          <button type="button" id="closeRegisterModal" class="btn btn-ghost">إلغاء</button>
         </div>
         <p id="registerFeedback" class="muted"></p>
       </form>
@@ -86,9 +88,8 @@
         <span class="pill" data-role="questionCount"></span>
       </div>
       <div class="row-actions card-actions">
-        <button class="btn btn-primary" data-role="register">Register</button>
-        <a class="btn btn-ghost" data-role="startExam">Go To Exam Page</a>
-        <a class="btn btn-primary hidden" data-role="download" target="_blank" rel="noopener">Download</a>
+        <button class="btn btn-primary" data-role="register">تسجيل</button>
+        <a class="btn btn-primary hidden" data-role="download" target="_blank" rel="noopener">تنزيل</a>
       </div>
     </article>
   </template>

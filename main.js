@@ -42,24 +42,24 @@ function bootTheme() {
 }
 
 function formatDate(ts) {
-  if (!ts || typeof ts.toDate !== "function") return "No date";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(ts.toDate());
+  if (!ts || typeof ts.toDate !== "function") return "بدون تاريخ";
+  return new Intl.DateTimeFormat("ar", { dateStyle: "medium", timeStyle: "short" }).format(ts.toDate());
 }
 
 function normalize(str) {
   return String(str || "").toLowerCase().trim();
 }
 
-function buildExamUrl(examId, name = "", email = "") {
+function buildExamUrl(examId, name = "", phone = "") {
   const params = new URLSearchParams({ examId });
   if (name) params.set("name", name);
-  if (email) params.set("email", email);
+  if (phone) params.set("phone", phone);
   return `./exam.html?${params.toString()}`;
 }
 
 function renderSubjects(exams) {
   const subjects = [...new Set(exams.map((e) => e.subject).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  subjectFilter.innerHTML = '<option value="all">All subjects</option>';
+  subjectFilter.innerHTML = '<option value="all">كل المواد</option>';
   subjects.forEach((subject) => {
     const option = document.createElement("option");
     option.value = subject;
@@ -81,6 +81,8 @@ function applyFilters() {
   const selectedSubject = subjectFilter.value;
 
   const filtered = allExams.filter((exam) => {
+    if (!exam.isEnabled) return false;
+
     const matchesSearch =
       normalize(exam.title).includes(q) ||
       normalize(exam.description).includes(q) ||
@@ -94,14 +96,19 @@ function applyFilters() {
 }
 
 function openRegisterModal(exam) {
+  const hasQuestions = Array.isArray(exam?.questions) && exam.questions.length > 0;
+  if (!hasQuestions || !exam?.isEnabled) return;
+
   selectedExamForRegistration = exam;
-  registerExamTitle.textContent = exam.title || "Untitled exam";
+  registerExamTitle.textContent = exam.title || "اختبار بدون عنوان";
   registerFeedback.textContent = "";
   registerForm.reset();
+  registerModal.setAttribute("aria-hidden", "false");
   registerModal.classList.remove("hidden");
 }
 
 function closeRegister() {
+  registerModal.setAttribute("aria-hidden", "true");
   registerModal.classList.add("hidden");
   selectedExamForRegistration = null;
 }
@@ -123,22 +130,23 @@ function renderCards(exams) {
 
     const questions = Array.isArray(exam.questions) ? exam.questions : [];
     const hasQuestions = questions.length > 0;
+    const isEnabled = Boolean(exam.isEnabled);
 
-    node.querySelector('[data-role="subject"]').textContent = exam.subject || "General";
+    node.querySelector('[data-role="subject"]').textContent = exam.subject || "عام";
     node.querySelector('[data-role="date"]').textContent = formatDate(exam.date);
-    node.querySelector('[data-role="title"]').textContent = exam.title || "Untitled exam";
-    node.querySelector('[data-role="description"]').textContent = exam.description || "No description provided.";
-    node.querySelector('[data-role="duration"]').textContent = `Duration: ${exam.duration || "N/A"}`;
-    node.querySelector('[data-role="questionCount"]').textContent = `${questions.length} Questions`;
+    node.querySelector('[data-role="title"]').textContent = exam.title || "اختبار بدون عنوان";
+    node.querySelector('[data-role="description"]').textContent = exam.description || "لا يوجد وصف متاح.";
+    node.querySelector('[data-role="duration"]').textContent = `المدة: ${exam.duration || "غير محددة"}`;
+    node.querySelector('[data-role="questionCount"]').textContent = `${questions.length} سؤال`;
 
-    node.querySelector('[data-role="register"]').addEventListener("click", () => openRegisterModal(exam));
-
-    const startLink = node.querySelector('[data-role="startExam"]');
-    startLink.href = buildExamUrl(exam.id);
-    if (!hasQuestions) {
-      startLink.classList.add("disabled-link");
-      startLink.removeAttribute("href");
-      startLink.textContent = "No Questions Yet";
+    const registerBtn = node.querySelector('[data-role="register"]');
+    registerBtn.addEventListener("click", () => openRegisterModal(exam));
+    if (!isEnabled) {
+      registerBtn.disabled = true;
+      registerBtn.textContent = "غير مفعّل";
+    } else if (!hasQuestions) {
+      registerBtn.disabled = true;
+      registerBtn.textContent = "لا توجد أسئلة بعد";
     }
 
     const downloadBtn = node.querySelector('[data-role="download"]');
@@ -166,7 +174,7 @@ function startRealtime() {
     },
     (error) => {
       console.error(error);
-      renderError("Could not load exams. Check Firebase config and Firestore rules.");
+      renderError("تعذر تحميل الاختبارات. تحقق من إعدادات Firebase وقواعد Firestore.");
     }
   );
 }
@@ -176,11 +184,10 @@ registerForm.addEventListener("submit", async (e) => {
   if (!selectedExamForRegistration) return;
 
   const fullName = document.getElementById("regName").value.trim();
-  const email = document.getElementById("regEmail").value.trim();
   const phone = document.getElementById("regPhone").value.trim();
 
-  if (!fullName || !email) {
-    registerFeedback.textContent = "Name and email are required.";
+  if (!fullName || !phone) {
+    registerFeedback.textContent = "الاسم ورقم الهاتف مطلوبان.";
     return;
   }
 
@@ -189,7 +196,6 @@ registerForm.addEventListener("submit", async (e) => {
       examId: selectedExamForRegistration.id,
       examTitle: selectedExamForRegistration.title || "",
       fullName,
-      email,
       phone,
       registeredAt: serverTimestamp()
     });
@@ -200,13 +206,13 @@ registerForm.addEventListener("submit", async (e) => {
     closeRegister();
 
     if (hasQuestions) {
-      window.location.href = buildExamUrl(examToStart.id, fullName, email);
+      window.location.href = buildExamUrl(examToStart.id, fullName, phone);
     } else {
-      alert("Registration completed. This exam has no online questions yet.");
+      alert("تم التسجيل بنجاح، لكن هذا الاختبار لا يحتوي على أسئلة إلكترونية حتى الآن.");
     }
   } catch (error) {
     console.error(error);
-    registerFeedback.textContent = "Failed to save registration.";
+    registerFeedback.textContent = "تعذر حفظ بيانات التسجيل.";
   }
 });
 

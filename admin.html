@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="ar" dir="rtl" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Exams Admin</title>
+  <title>إدارة الاختبارات</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -15,90 +15,105 @@
 
   <header class="shell topbar glass">
     <div>
-      <h1>Exams Admin</h1>
-      <p class="muted">Create exams, manage questions, track online readiness</p>
+      <h1>لوحة إدارة الاختبارات</h1>
+      <p class="muted">أنشئ الاختبارات، وأدر الأسئلة، وتابع جاهزية الاختبار الإلكتروني</p>
     </div>
     <div class="topbar-actions">
-      <button id="themeToggle" class="btn btn-ghost" aria-label="Toggle dark mode">Toggle Theme</button>
-      <button id="logoutBtn" class="btn btn-danger hidden">Logout</button>
+      <button id="themeToggle" class="btn btn-ghost" aria-label="تبديل المظهر">تبديل المظهر</button>
+      <button id="logoutBtn" class="btn btn-danger hidden">تسجيل الخروج</button>
     </div>
   </header>
 
   <main class="shell admin-layout">
     <section id="authCard" class="glass panel">
-      <h2>Admin Login</h2>
+      <h2>تسجيل دخول المشرف</h2>
       <form id="loginForm" class="stack">
         <div class="field">
-          <label for="email">Email</label>
+          <label for="email">البريد الإلكتروني</label>
           <input id="email" name="email" type="email" autocomplete="email" required />
         </div>
         <div class="field">
-          <label for="password">Password</label>
+          <label for="password">كلمة المرور</label>
           <input id="password" name="password" type="password" autocomplete="current-password" required />
         </div>
-        <button class="btn btn-primary" type="submit">Login</button>
+        <button class="btn btn-primary" type="submit">دخول</button>
         <p id="authError" class="error-msg hidden"></p>
       </form>
     </section>
 
     <section id="adminPanel" class="hidden admin-grid">
       <article class="glass panel">
-        <h2 id="formTitle">Create Exam</h2>
+        <h2 id="formTitle">إنشاء اختبار</h2>
+        <p class="muted section-note">أدخل بيانات الاختبار مرة واحدة، ثم أضف الأسئلة ليصبح جاهزًا للنشر مباشرة.</p>
         <form id="examForm" class="stack">
           <input id="editingId" type="hidden" />
 
           <div class="field">
-            <label for="title">Title</label>
+            <label for="title">عنوان الاختبار</label>
             <input id="title" name="title" type="text" maxlength="120" required />
           </div>
 
           <div class="field">
-            <label for="subject">Subject</label>
+            <label for="subject">المادة</label>
             <input id="subject" name="subject" type="text" maxlength="80" required />
           </div>
 
           <div class="field">
-            <label for="date">Date</label>
+            <label for="date">التاريخ</label>
             <input id="date" name="date" type="datetime-local" required />
           </div>
 
           <div class="field">
-            <label for="duration">Duration</label>
-            <input id="duration" name="duration" type="text" placeholder="e.g. 90 minutes" required />
+            <label for="duration">المدة</label>
+            <input id="duration" name="duration" type="text" inputmode="numeric" placeholder="مثال: 90 أو 90 دقيقة" required />
           </div>
 
           <div class="field">
-            <label for="description">Description</label>
+            <label for="description">الوصف</label>
             <textarea id="description" name="description" rows="3" maxlength="500" required></textarea>
           </div>
 
           <div class="field">
-            <label for="downloadLink">Download Link (optional)</label>
+            <label for="downloadLink">رابط التنزيل (اختياري)</label>
             <input id="downloadLink" name="downloadLink" type="url" placeholder="https://..." />
           </div>
 
+          <label class="toggle-field">
+            <input id="isEnabled" name="isEnabled" type="checkbox" />
+            <span>تفعيل الاختبار للطلاب</span>
+          </label>
+
           <div class="field">
-            <label>Online Exam Questions</label>
-            <p class="muted">Add questions without JSON. Each question needs at least 2 options.</p>
+            <label>أسئلة الاختبار الإلكتروني</label>
+            <p class="muted">أضف الأسئلة مباشرة دون JSON. يجب أن يحتوي كل سؤال على خيارين على الأقل.</p>
             <div id="questionBuilder" class="question-builder"></div>
             <div class="row-actions">
-              <button id="addQuestionBtn" type="button" class="btn btn-ghost">+ Add Question</button>
+              <button id="addQuestionBtn" type="button" class="btn btn-ghost">+ إضافة سؤال</button>
             </div>
           </div>
 
           <div class="row-actions">
-            <button id="saveBtn" class="btn btn-primary" type="submit">Save Exam</button>
-            <button id="cancelEditBtn" class="btn btn-ghost hidden" type="button">Cancel Edit</button>
+            <button id="saveBtn" class="btn btn-primary" type="submit">حفظ الاختبار</button>
+            <button id="cancelEditBtn" class="btn btn-ghost hidden" type="button">إلغاء التعديل</button>
           </div>
           <p id="formFeedback" class="muted"></p>
         </form>
       </article>
 
       <article class="glass panel">
-        <h2>Manage Exams</h2>
-        <p id="adminLoading" class="muted">Loading exams...</p>
-        <p id="adminEmpty" class="muted hidden">No exams yet.</p>
+        <h2>إدارة الاختبارات</h2>
+        <p class="muted section-note">يمكنك تعديل أي اختبار أو حذفه، وسيتم تحديث القائمة فورًا.</p>
+        <p id="adminLoading" class="muted">جارٍ تحميل الاختبارات...</p>
+        <p id="adminEmpty" class="muted hidden">لا توجد اختبارات حتى الآن.</p>
         <div id="adminList" class="admin-list"></div>
+      </article>
+
+      <article class="glass panel admin-span-full">
+        <h2>الاختبارات المتسلمة</h2>
+        <p class="muted section-note">هذه القائمة تعرض آخر المحاولات المسلّمة مع اسم الطالب ورقم الهاتف.</p>
+        <p id="attemptsLoading" class="muted">جارٍ تحميل المحاولات...</p>
+        <p id="attemptsEmpty" class="muted hidden">لا توجد محاولات مسلّمة حتى الآن.</p>
+        <div id="attemptsList" class="admin-list"></div>
       </article>
     </section>
   </main>
@@ -110,8 +125,21 @@
         <p class="muted" data-role="meta"></p>
       </div>
       <div class="row-actions">
-        <button class="btn btn-ghost" data-action="edit">Edit</button>
-        <button class="btn btn-danger" data-action="delete">Delete</button>
+        <button class="btn btn-ghost" data-action="edit">تعديل</button>
+        <button class="btn btn-danger" data-action="delete">حذف</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="attemptItemTemplate">
+    <div class="admin-item attempt-item">
+      <div>
+        <h3 data-role="student"></h3>
+        <p class="muted" data-role="exam"></p>
+        <p class="muted" data-role="meta"></p>
+      </div>
+      <div class="attempt-score-box">
+        <strong data-role="score"></strong>
       </div>
     </div>
   </template>
