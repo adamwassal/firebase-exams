@@ -186,6 +186,7 @@ async function fetchTextIp(endpoint, extractor) {
 
 async function fetchCurrentIp() {
   const endpoints = [
+    () => fetchJsonIp("https://api.ipify.org/?format=json"),
     () => fetchJsonIp("https://api64.ipify.org?format=json"),
     () => fetchJsonIp("https://api.ipify.org?format=json"),
     () => fetchJsonIp("https://api.ip.sb/jsonip"),
