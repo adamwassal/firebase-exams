@@ -35,8 +35,12 @@ let selectedExamForRegistration = null;
 let currentIpAddress = "";
 let currentIpHash = "";
 let historyByExamId = {};
+let currentDeviceId = "";
+let currentHistoryKey = "";
+let currentIdentityMode = "ip";
 const IP_CACHE_KEY = "firebase-exams:last-known-ip";
 const IP_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const DEVICE_ID_KEY = "firebase-exams:device-id";
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -89,6 +93,30 @@ async function sha256Hex(value) {
   const encoded = new TextEncoder().encode(value);
   const hashBuffer = await window.crypto.subtle.digest("SHA-256", encoded);
   return [...new Uint8Array(hashBuffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function createDeviceId() {
+  if (typeof window.crypto?.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function getOrCreateDeviceId() {
+  try {
+    const existing = String(localStorage.getItem(DEVICE_ID_KEY) || "").trim();
+    if (existing) return existing;
+
+    const created = createDeviceId();
+    localStorage.setItem(DEVICE_ID_KEY, created);
+    return created;
+  } catch (error) {
+    console.error("Device ID access failed", error);
+    return createDeviceId();
+  }
 }
 
 function readCachedIp() {
@@ -298,12 +326,15 @@ function renderIpHistory() {
 
 async function loadIpHistory() {
   ipHistoryHint.textContent = "جارٍ تحميل سجل الامتحانات من هذا الـ IP...";
+  currentDeviceId = getOrCreateDeviceId();
+  currentIdentityMode = "ip";
 
   try {
     const ipLookup = await fetchCurrentIp();
     currentIpAddress = ipLookup.ip;
     currentIpHash = await sha256Hex(currentIpAddress);
-    const historySnap = await getDoc(doc(ipHistoriesCollection, currentIpHash));
+    currentHistoryKey = currentIpHash;
+    const historySnap = await getDoc(doc(ipHistoriesCollection, currentHistoryKey));
     historyByExamId = historySnap.exists() ? historySnap.data().attemptsByExam || {} : {};
     ipHistoryHint.textContent =
       ipLookup.source === "cache"
@@ -311,8 +342,20 @@ async function loadIpHistory() {
         : `تم التعرف على الـ IP الحالي: ${currentIpAddress}`;
   } catch (error) {
     console.error(error);
-    historyByExamId = {};
-    ipHistoryHint.textContent = "تعذر التحقق من الـ IP الحالي، لذلك لن يظهر سجل المحاولات لهذا الجهاز.";
+    currentIpAddress = "";
+    currentIpHash = "";
+    currentHistoryKey = `device:${currentDeviceId}`;
+    currentIdentityMode = "device";
+
+    try {
+      const historySnap = await getDoc(doc(ipHistoriesCollection, currentHistoryKey));
+      historyByExamId = historySnap.exists() ? historySnap.data().attemptsByExam || {} : {};
+      ipHistoryHint.textContent = "تعذر التحقق من الـ IP الحالي. تم عرض سجل هذا المتصفح باستخدام معرّف الجهاز المحلي.";
+    } catch (historyError) {
+      console.error(historyError);
+      historyByExamId = {};
+      ipHistoryHint.textContent = "تعذر التحقق من الـ IP الحالي، وتعذر أيضًا تحميل سجل هذا الجهاز.";
+    }
   }
 
   renderIpHistory();
@@ -394,8 +437,8 @@ function startRealtime() {
 registerForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!selectedExamForRegistration) return;
-  if (!currentIpHash) {
-    registerFeedback.textContent = "تعذر التحقق من الـ IP الحالي. أعد تحميل الصفحة ثم حاول مرة أخرى.";
+  if (!currentHistoryKey) {
+    registerFeedback.textContent = "تعذر تحديد هذا الجهاز. أعد تحميل الصفحة ثم حاول مرة أخرى.";
     return;
   }
 
@@ -421,6 +464,9 @@ registerForm.addEventListener("submit", async (e) => {
       phone,
       ipAddress: currentIpAddress || "",
       ipHash: currentIpHash || "",
+      deviceId: currentDeviceId || "",
+      historyKey: currentHistoryKey || "",
+      identityMode: currentIdentityMode,
       registeredAt: serverTimestamp()
     });
 

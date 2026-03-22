@@ -37,8 +37,12 @@ let currentIpAddress = "";
 let currentIpHash = "";
 let currentAttempt = null;
 let renderCycle = 0;
+let currentDeviceId = "";
+let currentHistoryKey = "";
+let currentIdentityMode = "ip";
 const IP_CACHE_KEY = "firebase-exams:last-known-ip";
 const IP_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const DEVICE_ID_KEY = "firebase-exams:device-id";
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -90,6 +94,30 @@ async function sha256Hex(value) {
   const encoded = new TextEncoder().encode(value);
   const hashBuffer = await window.crypto.subtle.digest("SHA-256", encoded);
   return [...new Uint8Array(hashBuffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function createDeviceId() {
+  if (typeof window.crypto?.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function getOrCreateDeviceId() {
+  try {
+    const existing = String(localStorage.getItem(DEVICE_ID_KEY) || "").trim();
+    if (existing) return existing;
+
+    const created = createDeviceId();
+    localStorage.setItem(DEVICE_ID_KEY, created);
+    return created;
+  } catch (error) {
+    console.error("Device ID access failed", error);
+    return createDeviceId();
+  }
 }
 
 function readCachedIp() {
@@ -193,6 +221,10 @@ async function fetchCurrentIp() {
 
 function buildAttemptId(examId, ipHash) {
   return `${examId}__${ipHash}`;
+}
+
+function getIdentityLabel() {
+  return currentIdentityMode === "device" ? "هذا الجهاز" : "نفس الـ IP";
 }
 
 function formatAttemptDate(ts) {
@@ -450,7 +482,7 @@ function renderAttemptReview(exam, attempt) {
 
   resultBox.innerHTML = `
     <h2>لقد تم إجراء الامتحان بالفعل</h2>
-    <p class="muted">تم تسليم هذا الاختبار سابقًا من نفس الـ IP.</p>
+    <p class="muted">تم تسليم هذا الاختبار سابقًا من ${getIdentityLabel()}.</p>
     <p class="muted">الدرجة: <strong>${attempt.score || 0}</strong> من ${attempt.total || 0}</p>
     <p class="muted">تاريخ التسليم: ${formatAttemptDate(attempt.submittedAt)}</p>
   `;
@@ -461,20 +493,23 @@ function renderAttemptReview(exam, attempt) {
     <p class="muted">الاختيار الصحيح مميز باللون الأخضر، واختيارك الخاطئ مميز باللون الأحمر.</p>
   `;
   reviewBox.classList.remove("hidden");
-  progressText.textContent = "هذه مراجعة للمحاولة السابقة من نفس الـ IP.";
+  progressText.textContent = `هذه مراجعة للمحاولة السابقة من ${getIdentityLabel()}.`;
   timerHint.textContent = "تم فتح وضع المراجعة بدل إعادة الامتحان.";
 }
 
 async function saveIpHistory(attemptEntry) {
-  if (!currentIpHash) return;
+  if (!currentHistoryKey) return;
 
-  const historyRef = doc(ipHistoriesCollection, currentIpHash);
+  const historyRef = doc(ipHistoriesCollection, currentHistoryKey);
   const historySnap = await getDoc(historyRef);
   const existing = historySnap.exists() ? historySnap.data().attemptsByExam || {} : {};
   existing[currentExam.id] = attemptEntry;
 
   await setDoc(historyRef, {
     ipAddress: currentIpAddress,
+    ipHash: currentIpHash,
+    deviceId: currentDeviceId,
+    identityMode: currentIdentityMode,
     updatedAt: serverTimestamp(),
     attemptsByExam: existing
   });
@@ -497,7 +532,7 @@ async function submitExam(autoSubmitted = false, options = {}) {
     return;
   }
 
-  const alreadySubmitted = await getExistingAttempt(currentExam.id, currentIpHash);
+  const alreadySubmitted = await getExistingAttempt(currentExam.id, currentHistoryKey);
   if (alreadySubmitted) {
     renderAttemptReview(currentExam, alreadySubmitted);
     return;
@@ -522,6 +557,9 @@ async function submitExam(autoSubmitted = false, options = {}) {
       candidatePhone: phone,
       ipAddress: currentIpAddress,
       ipHash: currentIpHash,
+      deviceId: currentDeviceId,
+      historyKey: currentHistoryKey,
+      identityMode: currentIdentityMode,
       score,
       total,
       answers,
@@ -531,7 +569,7 @@ async function submitExam(autoSubmitted = false, options = {}) {
       submittedAt: serverTimestamp()
     };
 
-    await setDoc(doc(attemptsCollection, buildAttemptId(currentExam.id, currentIpHash)), attemptData);
+    await setDoc(doc(attemptsCollection, buildAttemptId(currentExam.id, currentHistoryKey)), attemptData);
     await saveIpHistory({
       examId: currentExam.id,
       examTitle: currentExam.title || "",
@@ -555,7 +593,11 @@ async function submitExam(autoSubmitted = false, options = {}) {
     resultBox.innerHTML = `
       <h2>${autoSubmitted ? "انتهى الوقت وتم الإرسال" : "تم إرسال النتيجة"}</h2>
       <p class="muted">درجتك: <strong>${score}</strong> من ${total}</p>
-      <p class="muted">تم حفظ المحاولة على هذا الـ IP: ${currentIpAddress}</p>
+      <p class="muted">${
+        currentIdentityMode === "device"
+          ? "تم حفظ المحاولة على هذا الجهاز."
+          : `تم حفظ المحاولة على هذا الـ IP: ${currentIpAddress}`
+      }</p>
     `;
     resultBox.classList.remove("hidden");
     reviewBox.classList.add("hidden");
@@ -615,7 +657,7 @@ function watchExam(examId) {
       examTitle.textContent = currentExam.title || "الاختبار الإلكتروني";
       examSubtitle.textContent = `${currentExam.subject || "عام"} • المدة: ${currentExam.duration || "غير محددة"}`;
 
-      const existingAttempt = await getExistingAttempt(currentExam.id, currentIpHash);
+      const existingAttempt = await getExistingAttempt(currentExam.id, currentHistoryKey);
       if (cycle !== renderCycle) return;
 
       if (existingAttempt) {
@@ -683,13 +725,19 @@ async function init() {
   }
 
   try {
+    currentDeviceId = getOrCreateDeviceId();
     const ipLookup = await fetchCurrentIp();
     currentIpAddress = ipLookup.ip;
     currentIpHash = await sha256Hex(currentIpAddress);
+    currentHistoryKey = currentIpHash;
+    currentIdentityMode = "ip";
   } catch (error) {
     console.error(error);
-    showError("تعذر التحقق من الـ IP الحالي، ولا يمكن فتح الامتحان بدون هذا التحقق.");
-    return;
+    currentIpAddress = "";
+    currentIpHash = "";
+    currentDeviceId = currentDeviceId || getOrCreateDeviceId();
+    currentHistoryKey = `device:${currentDeviceId}`;
+    currentIdentityMode = "device";
   }
 
   prefillCandidate(params.name, params.phone);
