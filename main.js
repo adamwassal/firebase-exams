@@ -35,6 +35,8 @@ let selectedExamForRegistration = null;
 let currentIpAddress = "";
 let currentIpHash = "";
 let historyByExamId = {};
+const IP_CACHE_KEY = "firebase-exams:last-known-ip";
+const IP_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -89,22 +91,100 @@ async function sha256Hex(value) {
   return [...new Uint8Array(hashBuffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function readCachedIp() {
+  try {
+    const raw = localStorage.getItem(IP_CACHE_KEY);
+    if (!raw) return "";
+
+    const parsed = JSON.parse(raw);
+    const ip = String(parsed?.ip || "").trim();
+    const savedAt = Number(parsed?.savedAt || 0);
+
+    if (!ip || !savedAt) return "";
+    if (Date.now() - savedAt > IP_CACHE_MAX_AGE_MS) return "";
+    return ip;
+  } catch (error) {
+    console.error("IP cache read failed", error);
+    return "";
+  }
+}
+
+function writeCachedIp(ip) {
+  if (!ip) return;
+
+  try {
+    localStorage.setItem(IP_CACHE_KEY, JSON.stringify({ ip, savedAt: Date.now() }));
+  } catch (error) {
+    console.error("IP cache write failed", error);
+  }
+}
+
+async function fetchJsonIp(endpoint, field = "ip") {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(endpoint, {
+      cache: "no-store",
+      signal: controller.signal
+    });
+    if (!response.ok) return "";
+
+    const payload = await response.json();
+    return String(payload?.[field] || "").trim();
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+async function fetchTextIp(endpoint, extractor) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(endpoint, {
+      cache: "no-store",
+      signal: controller.signal
+    });
+    if (!response.ok) return "";
+
+    const payload = await response.text();
+    return String(extractor(payload) || "").trim();
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 async function fetchCurrentIp() {
   const endpoints = [
-    "https://api64.ipify.org?format=json",
-    "https://api.ipify.org?format=json"
+    () => fetchJsonIp("https://api64.ipify.org?format=json"),
+    () => fetchJsonIp("https://api.ipify.org?format=json"),
+    () => fetchJsonIp("https://api.ip.sb/jsonip"),
+    () => fetchJsonIp("https://ipapi.co/json/"),
+    () =>
+      fetchTextIp("https://www.cloudflare.com/cdn-cgi/trace", (payload) =>
+        payload
+          .split("\n")
+          .find((line) => line.startsWith("ip="))
+          ?.slice(3)
+      )
   ];
 
-  for (const endpoint of endpoints) {
+  for (const resolveIp of endpoints) {
     try {
-      const response = await fetch(endpoint, { cache: "no-store" });
-      if (!response.ok) continue;
-      const payload = await response.json();
-      const ip = String(payload?.ip || "").trim();
-      if (ip) return ip;
+      const ip = await resolveIp();
+      if (ip) {
+        writeCachedIp(ip);
+        return { ip, source: "live" };
+      }
     } catch (error) {
       console.error("IP fetch failed", error);
     }
+  }
+
+  const cachedIp = readCachedIp();
+  if (cachedIp) {
+    return { ip: cachedIp, source: "cache" };
   }
 
   throw new Error("IP lookup failed");
@@ -220,11 +300,15 @@ async function loadIpHistory() {
   ipHistoryHint.textContent = "جارٍ تحميل سجل الامتحانات من هذا الـ IP...";
 
   try {
-    currentIpAddress = await fetchCurrentIp();
+    const ipLookup = await fetchCurrentIp();
+    currentIpAddress = ipLookup.ip;
     currentIpHash = await sha256Hex(currentIpAddress);
     const historySnap = await getDoc(doc(ipHistoriesCollection, currentIpHash));
     historyByExamId = historySnap.exists() ? historySnap.data().attemptsByExam || {} : {};
-    ipHistoryHint.textContent = `تم التعرف على الـ IP الحالي: ${currentIpAddress}`;
+    ipHistoryHint.textContent =
+      ipLookup.source === "cache"
+        ? `تعذر التحقق المباشر من الـ IP الحالي. تم استخدام آخر IP معروف: ${currentIpAddress}`
+        : `تم التعرف على الـ IP الحالي: ${currentIpAddress}`;
   } catch (error) {
     console.error(error);
     historyByExamId = {};
