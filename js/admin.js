@@ -14,7 +14,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut
-} from "./firebase-client.js?v=20260218c";
+} from "./firebase-client.js?v=20260322a";
 
 const authCard = document.getElementById("authCard");
 const adminPanel = document.getElementById("adminPanel");
@@ -304,13 +304,14 @@ function renderAttemptsList(attempts) {
     const node = attemptItemTemplate.content.firstElementChild.cloneNode(true);
     const studentName = attempt.candidateName || "بدون اسم";
     const studentPhone = attempt.candidatePhone || "بدون رقم";
+    const studentIp = attempt.ipAddress || "بدون IP";
     const examName = attempt.examTitle || "اختبار بدون عنوان";
     const score = Number.isFinite(Number(attempt.score)) ? Number(attempt.score) : 0;
     const total = Number.isFinite(Number(attempt.total)) ? Number(attempt.total) : 0;
 
     node.querySelector('[data-role="student"]').textContent = studentName;
     node.querySelector('[data-role="exam"]').textContent = `الاختبار: ${examName}`;
-    node.querySelector('[data-role="meta"]').textContent = `رقم الهاتف: ${studentPhone} • ${formatAttemptDate(attempt.submittedAt)}`;
+    node.querySelector('[data-role="meta"]').textContent = `رقم الهاتف: ${studentPhone} • IP: ${studentIp} • ${formatAttemptDate(attempt.submittedAt)}`;
     node.querySelector('[data-role="score"]').textContent = `${score} / ${total}`;
 
     attemptsList.appendChild(node);

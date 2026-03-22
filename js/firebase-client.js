@@ -4,6 +4,8 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
+  getDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -30,6 +32,7 @@ const auth = getAuth(app);
 const examsCollection = collection(db, "exams");
 const registrationsCollection = collection(db, "examRegistrations");
 const attemptsCollection = collection(db, "examAttempts");
+const ipHistoriesCollection = collection(db, "ipHistories");
 
 export {
   auth,
@@ -37,8 +40,11 @@ export {
   examsCollection,
   registrationsCollection,
   attemptsCollection,
+  ipHistoriesCollection,
   doc,
   addDoc,
+  setDoc,
+  getDoc,
   updateDoc,
   deleteDoc,
   query,

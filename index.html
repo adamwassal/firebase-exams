@@ -46,6 +46,17 @@
       </div>
     </section>
 
+    <section id="ipHistorySection" class="glass panel hidden">
+      <div class="section-head">
+        <div>
+          <h2>سجل الامتحانات من هذا الجهاز</h2>
+          <p id="ipHistoryHint" class="muted">جارٍ التحقق من سجل الـ IP الحالي...</p>
+        </div>
+      </div>
+      <div id="ipHistoryList" class="admin-list"></div>
+      <p id="ipHistoryEmpty" class="muted hidden">لا توجد امتحانات مسجلة حتى الآن من هذا الـ IP.</p>
+    </section>
+
     <section id="loadingState" class="state glass" aria-live="polite">جارٍ تحميل الاختبارات...</section>
     <section id="errorState" class="state glass hidden" aria-live="assertive"></section>
     <section id="emptyState" class="state glass hidden">لا توجد اختبارات مطابقة.</section>
@@ -64,7 +75,7 @@
         </div>
         <div class="field">
           <label for="regPhone">رقم الهاتف</label>
-          <input id="regPhone" type="tel" required />
+          <input id="regPhone" type="tel" inputmode="numeric" maxlength="11" pattern="01[0125][0-9]{8}" placeholder="01xxxxxxxxx" required />
         </div>
         <div class="row-actions">
           <button type="submit" class="btn btn-primary">تسجيل ومتابعة</button>
@@ -94,6 +105,6 @@
     </article>
   </template>
 
-  <script type="module" src="./main.js?v=20260218c"></script>
+  <script type="module" src="./main.js?v=20260322a"></script>
 </body>
 </html>

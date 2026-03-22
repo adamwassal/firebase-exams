@@ -1,15 +1,13 @@
 import {
   doc,
   onSnapshot,
-  addDoc,
-  getDocs,
+  setDoc,
+  getDoc,
   examsCollection,
   attemptsCollection,
-  query,
-  serverTimestamp,
-  where,
-  limit
-} from "./js/firebase-client.js?v=20260218c";
+  ipHistoriesCollection,
+  serverTimestamp
+} from "./js/firebase-client.js?v=20260322a";
 
 const examTitle = document.getElementById("examTitle");
 const examSubtitle = document.getElementById("examSubtitle");
@@ -19,6 +17,7 @@ const examPanel = document.getElementById("examPanel");
 const questionList = document.getElementById("questionList");
 const examForm = document.getElementById("examForm");
 const resultBox = document.getElementById("resultBox");
+const reviewBox = document.getElementById("reviewBox");
 const themeToggle = document.getElementById("themeToggle");
 const timerDisplay = document.getElementById("timerDisplay");
 const timerHint = document.getElementById("timerHint");
@@ -34,6 +33,10 @@ let timerDurationSeconds = 0;
 let isSubmitting = false;
 let hasSubmitted = false;
 let allowPageExit = false;
+let currentIpAddress = "";
+let currentIpHash = "";
+let currentAttempt = null;
+let renderCycle = 0;
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -71,6 +74,52 @@ function normalizeDigits(value) {
   return String(value || "")
     .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
     .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+}
+
+function normalizePhone(phone) {
+  return normalizeDigits(phone).replace(/\D/g, "");
+}
+
+function isValidEgyptPhone(phone) {
+  return /^01[0125]\d{8}$/.test(normalizePhone(phone));
+}
+
+async function sha256Hex(value) {
+  const encoded = new TextEncoder().encode(value);
+  const hashBuffer = await window.crypto.subtle.digest("SHA-256", encoded);
+  return [...new Uint8Array(hashBuffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function fetchCurrentIp() {
+  const endpoints = [
+    "https://api64.ipify.org?format=json",
+    "https://api.ipify.org?format=json"
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const ip = String(payload?.ip || "").trim();
+      if (ip) return ip;
+    } catch (error) {
+      console.error("IP fetch failed", error);
+    }
+  }
+
+  throw new Error("IP lookup failed");
+}
+
+function buildAttemptId(examId, ipHash) {
+  return `${examId}__${ipHash}`;
+}
+
+function formatAttemptDate(ts) {
+  if (!ts) return "بدون تاريخ";
+  const value = typeof ts.toDate === "function" ? ts.toDate() : ts instanceof Date ? ts : null;
+  if (!value) return "بدون تاريخ";
+  return new Intl.DateTimeFormat("ar", { dateStyle: "medium", timeStyle: "short" }).format(value);
 }
 
 function parseDurationToMinutes(value) {
@@ -194,7 +243,7 @@ function normalizeQuestions(exam) {
     .filter((q) => q.text && q.options.length >= 2 && Number.isInteger(q.correctIndex));
 }
 
-function renderQuestions(questions) {
+function renderQuestions(questions, answersMap = null, reviewMode = false) {
   questionList.innerHTML = "";
 
   questions.forEach((q, idx) => {
@@ -210,10 +259,37 @@ function renderQuestions(questions) {
     points.textContent = `${q.points} درجة`;
     card.appendChild(points);
 
+    const attemptAnswer = answersMap ? answersMap.get(idx) : null;
+
     q.options.forEach((option, optionIdx) => {
       const label = document.createElement("label");
       label.className = "option-row";
-      label.innerHTML = `<input type=\"radio\" name=\"answer_${idx}\" value=\"${optionIdx}\" required><span>${option}</span>`;
+
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = `answer_${idx}`;
+      input.value = String(optionIdx);
+      input.required = !reviewMode;
+
+      if (attemptAnswer && attemptAnswer.selectedIndex === optionIdx) {
+        input.checked = true;
+        label.classList.add("option-selected");
+      }
+
+      if (reviewMode) {
+        input.disabled = true;
+        if (optionIdx === q.correctIndex) {
+          label.classList.add("option-correct");
+        } else if (attemptAnswer && attemptAnswer.selectedIndex === optionIdx && !attemptAnswer.isCorrect) {
+          label.classList.add("option-wrong");
+        }
+      }
+
+      const span = document.createElement("span");
+      span.textContent = option;
+
+      label.appendChild(input);
+      label.appendChild(span);
       card.appendChild(label);
     });
 
@@ -251,45 +327,99 @@ function prefillCandidate(name, phone) {
   const nameInput = document.getElementById("candidateName");
   const phoneInput = document.getElementById("candidatePhone");
   if (nameInput) nameInput.value = name;
-  if (phoneInput) phoneInput.value = phone;
+  if (phoneInput) phoneInput.value = normalizePhone(phone);
+}
+
+function lockCandidateForm() {
+  const nameInput = document.getElementById("candidateName");
+  const phoneInput = document.getElementById("candidatePhone");
+  if (nameInput) nameInput.readOnly = true;
+  if (phoneInput) phoneInput.readOnly = true;
 }
 
 function hasExamSessionInProgress() {
-  return Boolean(currentExam && !hasSubmitted);
+  return Boolean(currentExam && !hasSubmitted && !currentAttempt);
 }
 
-async function hasExistingAttempt(examId, phone) {
-  const phoneValue = String(phone || "").trim();
-  if (!examId || !phoneValue) return false;
+async function getExistingAttempt(examId, ipHash) {
+  if (!examId || !ipHash) return null;
+  const snap = await getDoc(doc(attemptsCollection, buildAttemptId(examId, ipHash)));
+  return snap.exists() ? snap.data() : null;
+}
 
-  const attemptsQuery = query(
-    attemptsCollection,
-    where("examId", "==", examId),
-    where("candidatePhone", "==", phoneValue),
-    limit(1)
+function renderAttemptReview(exam, attempt) {
+  stopTimer();
+  currentAttempt = attempt;
+  hasSubmitted = true;
+  allowPageExit = true;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "تم التسليم";
+
+  prefillCandidate(attempt.candidateName || "", attempt.candidatePhone || "");
+  lockCandidateForm();
+
+  const questions = normalizeQuestions(exam);
+  const answersMap = new Map(
+    (Array.isArray(attempt.answers) ? attempt.answers : []).map((answer) => [Number(answer.questionIndex), answer])
   );
-  const snapshot = await getDocs(attemptsQuery);
-  return !snapshot.empty;
+
+  renderQuestions(questions, answersMap, true);
+  examPanel.classList.remove("hidden");
+  examLoading.classList.add("hidden");
+  examError.classList.add("hidden");
+
+  resultBox.innerHTML = `
+    <h2>لقد تم إجراء الامتحان بالفعل</h2>
+    <p class="muted">تم تسليم هذا الاختبار سابقًا من نفس الـ IP.</p>
+    <p class="muted">الدرجة: <strong>${attempt.score || 0}</strong> من ${attempt.total || 0}</p>
+    <p class="muted">تاريخ التسليم: ${formatAttemptDate(attempt.submittedAt)}</p>
+  `;
+  resultBox.classList.remove("hidden");
+
+  reviewBox.innerHTML = `
+    <h3>مراجعة الإجابات المختارة</h3>
+    <p class="muted">الاختيار الصحيح مميز باللون الأخضر، واختيارك الخاطئ مميز باللون الأحمر.</p>
+  `;
+  reviewBox.classList.remove("hidden");
+  progressText.textContent = "هذه مراجعة للمحاولة السابقة من نفس الـ IP.";
+  timerHint.textContent = "تم فتح وضع المراجعة بدل إعادة الامتحان.";
+}
+
+async function saveIpHistory(attemptEntry) {
+  if (!currentIpHash) return;
+
+  const historyRef = doc(ipHistoriesCollection, currentIpHash);
+  const historySnap = await getDoc(historyRef);
+  const existing = historySnap.exists() ? historySnap.data().attemptsByExam || {} : {};
+  existing[currentExam.id] = attemptEntry;
+
+  await setDoc(historyRef, {
+    ipAddress: currentIpAddress,
+    updatedAt: serverTimestamp(),
+    attemptsByExam: existing
+  });
 }
 
 async function submitExam(autoSubmitted = false, options = {}) {
   const { keepExitAllowed = false } = options;
-  if (!currentExam || isSubmitting || hasSubmitted) return;
+  if (!currentExam || isSubmitting || hasSubmitted || currentAttempt) return;
 
   const name = document.getElementById("candidateName").value.trim();
-  const phone = document.getElementById("candidatePhone").value.trim();
+  const phone = normalizePhone(document.getElementById("candidatePhone").value);
   if (!name || !phone) {
     alert("يرجى إدخال الاسم ورقم الهاتف.");
     return;
   }
 
-  const alreadySubmitted = await hasExistingAttempt(currentExam.id, phone);
+  if (!isValidEgyptPhone(phone)) {
+    alert("أدخل رقم هاتف مصري صحيح مكوّن من 11 رقمًا ويبدأ بـ 010 أو 011 أو 012 أو 015.");
+    document.getElementById("candidatePhone").focus();
+    return;
+  }
+
+  const alreadySubmitted = await getExistingAttempt(currentExam.id, currentIpHash);
   if (alreadySubmitted) {
-    hasSubmitted = true;
-    allowPageExit = true;
-    stopTimer();
-    alert("تم تسليم هذا الاختبار مسبقًا من نفس رقم الهاتف، ولا يمكن التسليم أكثر من مرة.");
-    showError("تم تسجيل محاولة سابقة لهذا الاختبار من نفس رقم الهاتف.");
+    renderAttemptReview(currentExam, alreadySubmitted);
     return;
   }
 
@@ -305,11 +435,13 @@ async function submitExam(autoSubmitted = false, options = {}) {
   submitBtn.textContent = autoSubmitted ? "انتهى الوقت..." : "جارٍ الإرسال...";
 
   try {
-    await addDoc(attemptsCollection, {
+    const attemptData = {
       examId: currentExam.id,
       examTitle: currentExam.title || "",
       candidateName: name,
       candidatePhone: phone,
+      ipAddress: currentIpAddress,
+      ipHash: currentIpHash,
       score,
       total,
       answers,
@@ -317,6 +449,18 @@ async function submitExam(autoSubmitted = false, options = {}) {
       durationLabel: currentExam.duration || "",
       timeSpentSeconds,
       submittedAt: serverTimestamp()
+    };
+
+    await setDoc(doc(attemptsCollection, buildAttemptId(currentExam.id, currentIpHash)), attemptData);
+    await saveIpHistory({
+      examId: currentExam.id,
+      examTitle: currentExam.title || "",
+      candidateName: name,
+      candidatePhone: phone,
+      score,
+      total,
+      submittedAt: new Date(),
+      submittedAtMs: Date.now()
     });
 
     hasSubmitted = true;
@@ -327,11 +471,14 @@ async function submitExam(autoSubmitted = false, options = {}) {
     examForm.querySelectorAll("input").forEach((input) => {
       input.disabled = true;
     });
+    lockCandidateForm();
     resultBox.innerHTML = `
       <h2>${autoSubmitted ? "انتهى الوقت وتم الإرسال" : "تم إرسال النتيجة"}</h2>
       <p class="muted">درجتك: <strong>${score}</strong> من ${total}</p>
+      <p class="muted">تم حفظ المحاولة على هذا الـ IP: ${currentIpAddress}</p>
     `;
     resultBox.classList.remove("hidden");
+    reviewBox.classList.add("hidden");
     progressText.textContent = "تم حفظ إجاباتك بنجاح.";
     timerHint.textContent = autoSubmitted ? "تم إرسال الإجابات تلقائيًا بعد انتهاء الوقت." : "تم إرسال الإجابات قبل انتهاء الوقت.";
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
@@ -352,7 +499,9 @@ function watchExam(examId) {
 
   onSnapshot(
     ref,
-    (snap) => {
+    async (snap) => {
+      const cycle = ++renderCycle;
+
       if (!snap.exists()) {
         showError("الاختبار غير موجود.");
         return;
@@ -362,9 +511,12 @@ function watchExam(examId) {
       allowPageExit = false;
       hasSubmitted = false;
       isSubmitting = false;
+      currentAttempt = null;
       submitBtn.disabled = false;
       submitBtn.textContent = "إرسال الإجابات";
       resultBox.classList.add("hidden");
+      reviewBox.classList.add("hidden");
+
       const questions = normalizeQuestions(currentExam);
 
       examLoading.classList.add("hidden");
@@ -382,6 +534,15 @@ function watchExam(examId) {
 
       examTitle.textContent = currentExam.title || "الاختبار الإلكتروني";
       examSubtitle.textContent = `${currentExam.subject || "عام"} • المدة: ${currentExam.duration || "غير محددة"}`;
+
+      const existingAttempt = await getExistingAttempt(currentExam.id, currentIpHash);
+      if (cycle !== renderCycle) return;
+
+      if (existingAttempt) {
+        renderAttemptReview(currentExam, existingAttempt);
+        return;
+      }
+
       renderQuestions(questions);
       startTimer(currentExam.duration);
       examPanel.classList.remove("hidden");
@@ -432,12 +593,26 @@ themeToggle.addEventListener("click", () => {
   setTheme(current === "dark" ? "light" : "dark");
 });
 
-bootTheme();
+async function init() {
+  bootTheme();
 
-const params = readParams();
-if (!params.examId) {
-  showError("معرّف الاختبار غير موجود في الرابط.");
-} else {
+  const params = readParams();
+  if (!params.examId) {
+    showError("معرّف الاختبار غير موجود في الرابط.");
+    return;
+  }
+
+  try {
+    currentIpAddress = await fetchCurrentIp();
+    currentIpHash = await sha256Hex(currentIpAddress);
+  } catch (error) {
+    console.error(error);
+    showError("تعذر التحقق من الـ IP الحالي، ولا يمكن فتح الامتحان بدون هذا التحقق.");
+    return;
+  }
+
   prefillCandidate(params.name, params.phone);
   watchExam(params.examId);
 }
+
+init();

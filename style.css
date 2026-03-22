@@ -611,6 +611,41 @@ html[data-theme="dark"] .option-row {
   background: linear-gradient(135deg, var(--success-soft), rgba(255, 255, 255, 0.58));
 }
 
+#reviewBox {
+  margin-top: 16px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-item {
+  display: grid;
+  gap: 10px;
+}
+
+.history-item .row-actions {
+  margin-top: 0;
+}
+
+.option-row.option-selected {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.option-row.option-correct {
+  border-color: rgba(22, 163, 74, 0.4);
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.option-row.option-wrong {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.1);
+}
+
 .admin-layout {
   margin-top: 20px;
   padding-bottom: 26px;

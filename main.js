@@ -1,12 +1,15 @@
 import {
   addDoc,
+  doc,
+  getDoc,
   examsCollection,
+  ipHistoriesCollection,
   registrationsCollection,
   query,
   orderBy,
   onSnapshot,
   serverTimestamp
-} from "./js/firebase-client.js?v=20260218c";
+} from "./js/firebase-client.js?v=20260322a";
 
 const cardsGrid = document.getElementById("cardsGrid");
 const loadingState = document.getElementById("loadingState");
@@ -22,9 +25,16 @@ const registerExamTitle = document.getElementById("registerExamTitle");
 const registerForm = document.getElementById("registerForm");
 const closeRegisterModal = document.getElementById("closeRegisterModal");
 const registerFeedback = document.getElementById("registerFeedback");
+const ipHistorySection = document.getElementById("ipHistorySection");
+const ipHistoryHint = document.getElementById("ipHistoryHint");
+const ipHistoryList = document.getElementById("ipHistoryList");
+const ipHistoryEmpty = document.getElementById("ipHistoryEmpty");
 
 let allExams = [];
 let selectedExamForRegistration = null;
+let currentIpAddress = "";
+let currentIpHash = "";
+let historyByExamId = {};
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -42,19 +52,62 @@ function bootTheme() {
 }
 
 function formatDate(ts) {
-  if (!ts || typeof ts.toDate !== "function") return "بدون تاريخ";
-  return new Intl.DateTimeFormat("ar", { dateStyle: "medium", timeStyle: "short" }).format(ts.toDate());
+  if (!ts) return "بدون تاريخ";
+  const value = typeof ts.toDate === "function" ? ts.toDate() : ts instanceof Date ? ts : null;
+  if (!value) return "بدون تاريخ";
+  return new Intl.DateTimeFormat("ar", { dateStyle: "medium", timeStyle: "short" }).format(value);
 }
 
 function normalize(str) {
   return String(str || "").toLowerCase().trim();
 }
 
+function normalizeDigits(value) {
+  return String(value || "")
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+}
+
+function normalizePhone(phone) {
+  return normalizeDigits(phone).replace(/\D/g, "");
+}
+
+function isValidEgyptPhone(phone) {
+  return /^01[0125]\d{8}$/.test(normalizePhone(phone));
+}
+
 function buildExamUrl(examId, name = "", phone = "") {
   const params = new URLSearchParams({ examId });
   if (name) params.set("name", name);
-  if (phone) params.set("phone", phone);
+  if (phone) params.set("phone", normalizePhone(phone));
   return `./exam.html?${params.toString()}`;
+}
+
+async function sha256Hex(value) {
+  const encoded = new TextEncoder().encode(value);
+  const hashBuffer = await window.crypto.subtle.digest("SHA-256", encoded);
+  return [...new Uint8Array(hashBuffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function fetchCurrentIp() {
+  const endpoints = [
+    "https://api64.ipify.org?format=json",
+    "https://api.ipify.org?format=json"
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const ip = String(payload?.ip || "").trim();
+      if (ip) return ip;
+    } catch (error) {
+      console.error("IP fetch failed", error);
+    }
+  }
+
+  throw new Error("IP lookup failed");
 }
 
 function renderSubjects(exams) {
@@ -99,6 +152,11 @@ function openRegisterModal(exam) {
   const hasQuestions = Array.isArray(exam?.questions) && exam.questions.length > 0;
   if (!hasQuestions || !exam?.isEnabled) return;
 
+  if (historyByExamId[exam.id]) {
+    window.location.href = buildExamUrl(exam.id);
+    return;
+  }
+
   selectedExamForRegistration = exam;
   registerExamTitle.textContent = exam.title || "اختبار بدون عنوان";
   registerFeedback.textContent = "";
@@ -111,6 +169,70 @@ function closeRegister() {
   registerModal.setAttribute("aria-hidden", "true");
   registerModal.classList.add("hidden");
   selectedExamForRegistration = null;
+}
+
+function createHistoryNode(entry) {
+  const item = document.createElement("article");
+  item.className = "admin-item history-item";
+
+  const title = document.createElement("h3");
+  title.textContent = entry.examTitle || "اختبار بدون عنوان";
+  item.appendChild(title);
+
+  const meta = document.createElement("p");
+  meta.className = "muted";
+  meta.textContent = `تم التسليم: ${formatDate(entry.submittedAt)} • الدرجة: ${entry.score || 0} / ${entry.total || 0}`;
+  item.appendChild(meta);
+
+  const actions = document.createElement("div");
+  actions.className = "row-actions";
+
+  const link = document.createElement("a");
+  link.className = "btn btn-primary";
+  link.href = buildExamUrl(entry.examId);
+  link.textContent = "مراجعة الإجابات";
+  actions.appendChild(link);
+
+  item.appendChild(actions);
+  return item;
+}
+
+function renderIpHistory() {
+  ipHistoryList.innerHTML = "";
+  ipHistorySection.classList.remove("hidden");
+
+  const entries = Object.values(historyByExamId).sort((a, b) => {
+    const aTime = Number(a?.submittedAtMs || a?.submittedAt?.seconds || 0);
+    const bTime = Number(b?.submittedAtMs || b?.submittedAt?.seconds || 0);
+    return bTime - aTime;
+  });
+
+  if (!entries.length) {
+    ipHistoryEmpty.classList.remove("hidden");
+    return;
+  }
+
+  ipHistoryEmpty.classList.add("hidden");
+  entries.forEach((entry) => ipHistoryList.appendChild(createHistoryNode(entry)));
+}
+
+async function loadIpHistory() {
+  ipHistoryHint.textContent = "جارٍ تحميل سجل الامتحانات من هذا الـ IP...";
+
+  try {
+    currentIpAddress = await fetchCurrentIp();
+    currentIpHash = await sha256Hex(currentIpAddress);
+    const historySnap = await getDoc(doc(ipHistoriesCollection, currentIpHash));
+    historyByExamId = historySnap.exists() ? historySnap.data().attemptsByExam || {} : {};
+    ipHistoryHint.textContent = `تم التعرف على الـ IP الحالي: ${currentIpAddress}`;
+  } catch (error) {
+    console.error(error);
+    historyByExamId = {};
+    ipHistoryHint.textContent = "تعذر التحقق من الـ IP الحالي، لذلك لن يظهر سجل المحاولات لهذا الجهاز.";
+  }
+
+  renderIpHistory();
+  applyFilters();
 }
 
 function renderCards(exams) {
@@ -131,6 +253,7 @@ function renderCards(exams) {
     const questions = Array.isArray(exam.questions) ? exam.questions : [];
     const hasQuestions = questions.length > 0;
     const isEnabled = Boolean(exam.isEnabled);
+    const existingEntry = historyByExamId[exam.id];
 
     node.querySelector('[data-role="subject"]').textContent = exam.subject || "عام";
     node.querySelector('[data-role="date"]').textContent = formatDate(exam.date);
@@ -141,6 +264,11 @@ function renderCards(exams) {
 
     const registerBtn = node.querySelector('[data-role="register"]');
     registerBtn.addEventListener("click", () => openRegisterModal(exam));
+
+    if (existingEntry) {
+      registerBtn.textContent = "تم إجراء الامتحان بالفعل";
+    }
+
     if (!isEnabled) {
       registerBtn.disabled = true;
       registerBtn.textContent = "غير مفعّل";
@@ -182,12 +310,22 @@ function startRealtime() {
 registerForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!selectedExamForRegistration) return;
+  if (!currentIpHash) {
+    registerFeedback.textContent = "تعذر التحقق من الـ IP الحالي. أعد تحميل الصفحة ثم حاول مرة أخرى.";
+    return;
+  }
 
   const fullName = document.getElementById("regName").value.trim();
-  const phone = document.getElementById("regPhone").value.trim();
+  const phone = normalizePhone(document.getElementById("regPhone").value);
 
   if (!fullName || !phone) {
     registerFeedback.textContent = "الاسم ورقم الهاتف مطلوبان.";
+    return;
+  }
+
+  if (!isValidEgyptPhone(phone)) {
+    registerFeedback.textContent = "أدخل رقم هاتف مصري صحيح مكوّن من 11 رقمًا ويبدأ بـ 010 أو 011 أو 012 أو 015.";
+    document.getElementById("regPhone").focus();
     return;
   }
 
@@ -197,6 +335,8 @@ registerForm.addEventListener("submit", async (e) => {
       examTitle: selectedExamForRegistration.title || "",
       fullName,
       phone,
+      ipAddress: currentIpAddress || "",
+      ipHash: currentIpHash || "",
       registeredAt: serverTimestamp()
     });
 
@@ -231,3 +371,4 @@ themeToggle.addEventListener("click", () => {
 
 bootTheme();
 startRealtime();
+loadIpHistory();

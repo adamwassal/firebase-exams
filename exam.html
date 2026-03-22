@@ -52,7 +52,7 @@
           </div>
           <div class="field">
             <label for="candidatePhone">رقم الهاتف</label>
-            <input id="candidatePhone" name="candidatePhone" type="tel" required />
+            <input id="candidatePhone" name="candidatePhone" type="tel" inputmode="numeric" maxlength="11" pattern="01[0125][0-9]{8}" placeholder="01xxxxxxxxx" required />
           </div>
         </div>
       </form>
@@ -66,8 +66,9 @@
     </section>
 
     <section id="resultBox" class="glass panel hidden"></section>
+    <section id="reviewBox" class="glass panel hidden"></section>
   </main>
 
-  <script type="module" src="./exam.js?v=20260218c"></script>
+  <script type="module" src="./exam.js?v=20260322a"></script>
 </body>
 </html>
