@@ -462,6 +462,12 @@ html[data-theme="dark"] .btn-ghost {
   padding: 22px;
 }
 
+.details-modal-card {
+  width: min(920px, 96vw);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
 .stack {
   display: grid;
   gap: 12px;
@@ -660,7 +666,8 @@ html[data-theme="dark"] .option-row {
 }
 
 .admin-list,
-.question-builder {
+.question-builder,
+.attempt-details-list {
   margin-top: 14px;
   display: grid;
   gap: 12px;

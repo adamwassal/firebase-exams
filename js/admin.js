@@ -3,6 +3,7 @@ import {
   examsCollection,
   attemptsCollection,
   doc,
+  getDoc,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -37,6 +38,11 @@ const attemptItemTemplate = document.getElementById("attemptItemTemplate");
 const themeToggle = document.getElementById("themeToggle");
 const questionBuilder = document.getElementById("questionBuilder");
 const addQuestionBtn = document.getElementById("addQuestionBtn");
+const attemptDetailsModal = document.getElementById("attemptDetailsModal");
+const attemptDetailsTitle = document.getElementById("attemptDetailsTitle");
+const attemptDetailsMeta = document.getElementById("attemptDetailsMeta");
+const attemptDetailsBody = document.getElementById("attemptDetailsBody");
+const closeAttemptDetailsModal = document.getElementById("closeAttemptDetailsModal");
 
 let unsubscribeExams = null;
 let unsubscribeAttempts = null;
@@ -289,6 +295,127 @@ function formatAttemptDate(ts) {
   return new Intl.DateTimeFormat("ar", { dateStyle: "medium", timeStyle: "short" }).format(ts.toDate());
 }
 
+function normalizeAttemptQuestions(questionSource) {
+  const list = Array.isArray(questionSource) ? questionSource : [];
+  return list
+    .map((question) => {
+      const options = Array.isArray(question.options) ? question.options.map((option) => String(option || "").trim()).filter(Boolean) : [];
+      const correctIndex = Number(question.correctIndex ?? question.correctindex ?? question.correct_answer_index);
+      return {
+        text: String(question.text || "").trim(),
+        options,
+        correctIndex,
+        points: Number(question.points || 1)
+      };
+    })
+    .filter((question) => question.text && question.options.length >= 2 && Number.isInteger(question.correctIndex));
+}
+
+function closeAttemptDetails() {
+  attemptDetailsModal.classList.add("hidden");
+  attemptDetailsModal.setAttribute("aria-hidden", "true");
+  attemptDetailsBody.innerHTML = "";
+  attemptDetailsTitle.textContent = "تفاصيل المحاولة";
+  attemptDetailsMeta.textContent = "";
+}
+
+function renderAttemptDetails(attempt, questions) {
+  const answersMap = new Map(
+    (Array.isArray(attempt.answers) ? attempt.answers : []).map((answer) => [Number(answer.questionIndex), answer])
+  );
+
+  attemptDetailsTitle.textContent = `${attempt.candidateName || "بدون اسم"} - ${attempt.examTitle || "اختبار بدون عنوان"}`;
+  attemptDetailsMeta.textContent =
+    `هاتف الطالب: ${attempt.candidatePhone || "بدون رقم"} • هاتف ولي الأمر: ${attempt.guardianPhone || "بدون رقم"} • ` +
+    `الدرجة: ${Number(attempt.score || 0)} / ${Number(attempt.total || 0)} • ${formatAttemptDate(attempt.submittedAt)}`;
+  attemptDetailsBody.innerHTML = "";
+
+  if (!questions.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "تعذر تحميل نصوص الأسئلة لهذه المحاولة.";
+    attemptDetailsBody.appendChild(empty);
+  } else {
+    questions.forEach((question, index) => {
+      const answer = answersMap.get(index);
+      const item = document.createElement("article");
+      item.className = "question-item";
+
+      const title = document.createElement("h3");
+      title.textContent = `${index + 1}. ${question.text}`;
+      item.appendChild(title);
+
+      const points = document.createElement("p");
+      points.className = "muted";
+      points.textContent = `${question.points} درجة`;
+      item.appendChild(points);
+
+      question.options.forEach((option, optionIndex) => {
+        const row = document.createElement("div");
+        row.className = "option-row";
+
+        if (optionIndex === question.correctIndex) {
+          row.classList.add("option-correct");
+        }
+
+        if (answer?.selectedIndex === optionIndex) {
+          row.classList.add("option-selected");
+          if (!answer.isCorrect) {
+            row.classList.add("option-wrong");
+          }
+        }
+
+        const label = document.createElement("span");
+        label.textContent = option;
+        row.appendChild(label);
+        item.appendChild(row);
+      });
+
+      const summary = document.createElement("p");
+      summary.className = "muted";
+      if (!answer || answer.selectedIndex < 0) {
+        summary.textContent = "لم يجب الطالب على هذا السؤال.";
+      } else {
+        const selectedOption = question.options[answer.selectedIndex] || "اختيار غير معروف";
+        const resultLabel = answer.isCorrect ? "إجابة صحيحة" : "إجابة خاطئة";
+        summary.textContent = `اختيار الطالب: ${selectedOption} • ${resultLabel}`;
+      }
+      item.appendChild(summary);
+
+      attemptDetailsBody.appendChild(item);
+    });
+  }
+
+  attemptDetailsModal.classList.remove("hidden");
+  attemptDetailsModal.setAttribute("aria-hidden", "false");
+}
+
+async function openAttemptDetails(attempt) {
+  attemptDetailsTitle.textContent = "جارٍ تحميل تفاصيل المحاولة...";
+  attemptDetailsMeta.textContent = "";
+  attemptDetailsBody.innerHTML = '<p class="muted">جارٍ تحميل الأسئلة والإجابات...</p>';
+  attemptDetailsModal.classList.remove("hidden");
+  attemptDetailsModal.setAttribute("aria-hidden", "false");
+
+  try {
+    let questions = normalizeAttemptQuestions(attempt.questionSnapshot);
+
+    if (!questions.length && attempt.examId) {
+      const examSnap = await getDoc(doc(examsCollection, attempt.examId));
+      if (examSnap.exists()) {
+        questions = normalizeAttemptQuestions(examSnap.data().questions);
+      }
+    }
+
+    renderAttemptDetails(attempt, questions);
+  } catch (error) {
+    console.error(error);
+    attemptDetailsTitle.textContent = "تعذر تحميل التفاصيل";
+    attemptDetailsMeta.textContent = "";
+    attemptDetailsBody.innerHTML = '<p class="muted">حدث خطأ أثناء تحميل تفاصيل إجابات الطالب.</p>';
+  }
+}
+
 function renderAttemptsList(attempts) {
   attemptsList.innerHTML = "";
   attemptsLoading.classList.add("hidden");
@@ -304,6 +431,7 @@ function renderAttemptsList(attempts) {
     const node = attemptItemTemplate.content.firstElementChild.cloneNode(true);
     const studentName = attempt.candidateName || "بدون اسم";
     const studentPhone = attempt.candidatePhone || "بدون رقم";
+    const guardianPhone = attempt.guardianPhone || "بدون رقم";
     const studentIp = attempt.ipAddress || "بدون IP";
     const examName = attempt.examTitle || "اختبار بدون عنوان";
     const score = Number.isFinite(Number(attempt.score)) ? Number(attempt.score) : 0;
@@ -311,8 +439,11 @@ function renderAttemptsList(attempts) {
 
     node.querySelector('[data-role="student"]').textContent = studentName;
     node.querySelector('[data-role="exam"]').textContent = `الاختبار: ${examName}`;
-    node.querySelector('[data-role="meta"]').textContent = `رقم الهاتف: ${studentPhone} • IP: ${studentIp} • ${formatAttemptDate(attempt.submittedAt)}`;
+    node.querySelector('[data-role="meta"]').textContent = `رقم الهاتف: ${studentPhone} • ولي الأمر: ${guardianPhone} • IP: ${studentIp} • ${formatAttemptDate(attempt.submittedAt)}`;
     node.querySelector('[data-role="score"]').textContent = `${score} / ${total}`;
+    node.querySelector('[data-action="view-details"]').addEventListener("click", () => {
+      openAttemptDetails(attempt);
+    });
 
     attemptsList.appendChild(node);
   });
@@ -486,6 +617,13 @@ addQuestionBuilderItem();
 if (addQuestionBtn) {
   addQuestionBtn.addEventListener("click", () => addQuestionBuilderItem());
 }
+
+closeAttemptDetailsModal?.addEventListener("click", closeAttemptDetails);
+attemptDetailsModal?.addEventListener("click", (event) => {
+  if (event.target === attemptDetailsModal) {
+    closeAttemptDetails();
+  }
+});
 
 themeToggle.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme");

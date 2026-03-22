@@ -29,6 +29,9 @@ const ipHistorySection = document.getElementById("ipHistorySection");
 const ipHistoryHint = document.getElementById("ipHistoryHint");
 const ipHistoryList = document.getElementById("ipHistoryList");
 const ipHistoryEmpty = document.getElementById("ipHistoryEmpty");
+const regNameInput = document.getElementById("regName");
+const regPhoneInput = document.getElementById("regPhone");
+const regGuardianPhoneInput = document.getElementById("regGuardianPhone");
 
 let allExams = [];
 let selectedExamForRegistration = null;
@@ -41,6 +44,7 @@ let currentIdentityMode = "ip";
 const IP_CACHE_KEY = "firebase-exams:last-known-ip";
 const IP_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const DEVICE_ID_KEY = "firebase-exams:device-id";
+const STUDENT_PROFILE_KEY = "firebase-exams:student-profile";
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -82,11 +86,59 @@ function isValidEgyptPhone(phone) {
   return /^01[0125]\d{8}$/.test(normalizePhone(phone));
 }
 
-function buildExamUrl(examId, name = "", phone = "") {
+function buildExamUrl(examId, name = "", phone = "", guardianPhone = "") {
   const params = new URLSearchParams({ examId });
   if (name) params.set("name", name);
   if (phone) params.set("phone", normalizePhone(phone));
+  if (guardianPhone) params.set("guardianPhone", normalizePhone(guardianPhone));
   return `./exam.html?${params.toString()}`;
+}
+
+function readStudentProfile() {
+  try {
+    const raw = localStorage.getItem(STUDENT_PROFILE_KEY);
+    if (!raw) return { fullName: "", phone: "", guardianPhone: "" };
+
+    const parsed = JSON.parse(raw);
+    return {
+      fullName: String(parsed?.fullName || "").trim(),
+      phone: normalizePhone(parsed?.phone || ""),
+      guardianPhone: normalizePhone(parsed?.guardianPhone || "")
+    };
+  } catch (error) {
+    console.error("Student profile read failed", error);
+    return { fullName: "", phone: "", guardianPhone: "" };
+  }
+}
+
+function writeStudentProfile(profile) {
+  try {
+    localStorage.setItem(
+      STUDENT_PROFILE_KEY,
+      JSON.stringify({
+        fullName: String(profile?.fullName || "").trim(),
+        phone: normalizePhone(profile?.phone || ""),
+        guardianPhone: normalizePhone(profile?.guardianPhone || "")
+      })
+    );
+  } catch (error) {
+    console.error("Student profile write failed", error);
+  }
+}
+
+function prefillRegisterForm() {
+  const profile = readStudentProfile();
+  if (regNameInput) regNameInput.value = profile.fullName;
+  if (regPhoneInput) regPhoneInput.value = profile.phone;
+  if (regGuardianPhoneInput) regGuardianPhoneInput.value = profile.guardianPhone;
+}
+
+function persistRegisterForm() {
+  writeStudentProfile({
+    fullName: regNameInput?.value || "",
+    phone: regPhoneInput?.value || "",
+    guardianPhone: regGuardianPhoneInput?.value || ""
+  });
 }
 
 async function sha256Hex(value) {
@@ -185,8 +237,8 @@ async function fetchTextIp(endpoint, extractor) {
 
 async function fetchCurrentIp() {
   const endpoints = [
+    () => fetchJsonIp("https://api4.ipify.org?format=json"),
     () => fetchJsonIp("https://api.ipify.org/?format=json"),
-    () => fetchJsonIp("https://api64.ipify.org?format=json"),
     () => fetchJsonIp("https://api.ipify.org?format=json"),
     () => fetchJsonIp("https://api.ip.sb/jsonip"),
     () => fetchJsonIp("https://ipapi.co/json/"),
@@ -202,7 +254,7 @@ async function fetchCurrentIp() {
   for (const resolveIp of endpoints) {
     try {
       const ip = await resolveIp();
-      if (ip) {
+      if (ip && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
         writeCachedIp(ip);
         return { ip, source: "live" };
       }
@@ -269,7 +321,7 @@ function openRegisterModal(exam) {
   selectedExamForRegistration = exam;
   registerExamTitle.textContent = exam.title || "اختبار بدون عنوان";
   registerFeedback.textContent = "";
-  registerForm.reset();
+  prefillRegisterForm();
   registerModal.setAttribute("aria-hidden", "false");
   registerModal.classList.remove("hidden");
 }
@@ -443,26 +495,36 @@ registerForm.addEventListener("submit", async (e) => {
     return;
   }
 
-  const fullName = document.getElementById("regName").value.trim();
-  const phone = normalizePhone(document.getElementById("regPhone").value);
+  const fullName = regNameInput.value.trim();
+  const phone = normalizePhone(regPhoneInput.value);
+  const guardianPhone = normalizePhone(regGuardianPhoneInput.value);
 
-  if (!fullName || !phone) {
-    registerFeedback.textContent = "الاسم ورقم الهاتف مطلوبان.";
+  if (!fullName || !phone || !guardianPhone) {
+    registerFeedback.textContent = "الاسم ورقم الهاتف ورقم ولي الأمر مطلوبة.";
     return;
   }
 
   if (!isValidEgyptPhone(phone)) {
     registerFeedback.textContent = "أدخل رقم هاتف مصري صحيح مكوّن من 11 رقمًا ويبدأ بـ 010 أو 011 أو 012 أو 015.";
-    document.getElementById("regPhone").focus();
+    regPhoneInput.focus();
+    return;
+  }
+
+  if (!isValidEgyptPhone(guardianPhone)) {
+    registerFeedback.textContent = "أدخل رقم هاتف ولي أمر صحيح مكوّن من 11 رقمًا ويبدأ بـ 010 أو 011 أو 012 أو 015.";
+    regGuardianPhoneInput.focus();
     return;
   }
 
   try {
+    persistRegisterForm();
+
     await addDoc(registrationsCollection, {
       examId: selectedExamForRegistration.id,
       examTitle: selectedExamForRegistration.title || "",
       fullName,
       phone,
+      guardianPhone,
       ipAddress: currentIpAddress || "",
       ipHash: currentIpHash || "",
       deviceId: currentDeviceId || "",
@@ -477,7 +539,7 @@ registerForm.addEventListener("submit", async (e) => {
     closeRegister();
 
     if (hasQuestions) {
-      window.location.href = buildExamUrl(examToStart.id, fullName, phone);
+      window.location.href = buildExamUrl(examToStart.id, fullName, phone, guardianPhone);
     } else {
       alert("تم التسجيل بنجاح، لكن هذا الاختبار لا يحتوي على أسئلة إلكترونية حتى الآن.");
     }
@@ -491,6 +553,9 @@ closeRegisterModal.addEventListener("click", closeRegister);
 registerModal.addEventListener("click", (e) => {
   if (e.target === registerModal) closeRegister();
 });
+regNameInput?.addEventListener("input", persistRegisterForm);
+regPhoneInput?.addEventListener("input", persistRegisterForm);
+regGuardianPhoneInput?.addEventListener("input", persistRegisterForm);
 
 searchInput.addEventListener("input", applyFilters);
 subjectFilter.addEventListener("change", applyFilters);

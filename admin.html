@@ -138,12 +138,28 @@
         <p class="muted" data-role="exam"></p>
         <p class="muted" data-role="meta"></p>
       </div>
-      <div class="attempt-score-box">
-        <strong data-role="score"></strong>
+      <div class="row-actions">
+        <div class="attempt-score-box">
+          <strong data-role="score"></strong>
+        </div>
+        <button class="btn btn-ghost btn-sm" data-action="view-details" type="button">عرض الإجابات</button>
       </div>
     </div>
   </template>
 
-  <script type="module" src="./js/admin.js?v=20260322a"></script>
+  <section id="attemptDetailsModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card glass details-modal-card">
+      <div class="section-head">
+        <div>
+          <h2 id="attemptDetailsTitle">تفاصيل المحاولة</h2>
+          <p id="attemptDetailsMeta" class="muted"></p>
+        </div>
+        <button id="closeAttemptDetailsModal" class="btn btn-ghost" type="button">إغلاق</button>
+      </div>
+      <div id="attemptDetailsBody" class="attempt-details-list"></div>
+    </div>
+  </section>
+
+  <script type="module" src="./js/admin.js?v=20260322f"></script>
 </body>
 </html>

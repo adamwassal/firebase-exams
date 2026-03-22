@@ -43,6 +43,7 @@ let currentIdentityMode = "ip";
 const IP_CACHE_KEY = "firebase-exams:last-known-ip";
 const IP_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const DEVICE_ID_KEY = "firebase-exams:device-id";
+const STUDENT_PROFILE_KEY = "firebase-exams:student-profile";
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -64,7 +65,8 @@ function readParams() {
   return {
     examId: params.get("examId"),
     name: params.get("name") || "",
-    phone: params.get("phone") || ""
+    phone: params.get("phone") || "",
+    guardianPhone: params.get("guardianPhone") || ""
   };
 }
 
@@ -88,6 +90,38 @@ function normalizePhone(phone) {
 
 function isValidEgyptPhone(phone) {
   return /^01[0125]\d{8}$/.test(normalizePhone(phone));
+}
+
+function readStudentProfile() {
+  try {
+    const raw = localStorage.getItem(STUDENT_PROFILE_KEY);
+    if (!raw) return { fullName: "", phone: "", guardianPhone: "" };
+
+    const parsed = JSON.parse(raw);
+    return {
+      fullName: String(parsed?.fullName || "").trim(),
+      phone: normalizePhone(parsed?.phone || ""),
+      guardianPhone: normalizePhone(parsed?.guardianPhone || "")
+    };
+  } catch (error) {
+    console.error("Student profile read failed", error);
+    return { fullName: "", phone: "", guardianPhone: "" };
+  }
+}
+
+function writeStudentProfile(profile) {
+  try {
+    localStorage.setItem(
+      STUDENT_PROFILE_KEY,
+      JSON.stringify({
+        fullName: String(profile?.fullName || "").trim(),
+        phone: normalizePhone(profile?.phone || ""),
+        guardianPhone: normalizePhone(profile?.guardianPhone || "")
+      })
+    );
+  } catch (error) {
+    console.error("Student profile write failed", error);
+  }
 }
 
 async function sha256Hex(value) {
@@ -186,8 +220,8 @@ async function fetchTextIp(endpoint, extractor) {
 
 async function fetchCurrentIp() {
   const endpoints = [
+    () => fetchJsonIp("https://api4.ipify.org?format=json"),
     () => fetchJsonIp("https://api.ipify.org/?format=json"),
-    () => fetchJsonIp("https://api64.ipify.org?format=json"),
     () => fetchJsonIp("https://api.ipify.org?format=json"),
     () => fetchJsonIp("https://api.ip.sb/jsonip"),
     () => fetchJsonIp("https://ipapi.co/json/"),
@@ -203,7 +237,7 @@ async function fetchCurrentIp() {
   for (const resolveIp of endpoints) {
     try {
       const ip = await resolveIp();
-      if (ip) {
+      if (ip && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
         writeCachedIp(ip);
         return { ip, source: "live" };
       }
@@ -436,18 +470,30 @@ function calculateResult(questions, formData) {
   return { score, total, answers };
 }
 
-function prefillCandidate(name, phone) {
+function prefillCandidate(name, phone, guardianPhone) {
   const nameInput = document.getElementById("candidateName");
   const phoneInput = document.getElementById("candidatePhone");
+  const guardianPhoneInput = document.getElementById("candidateGuardianPhone");
   if (nameInput) nameInput.value = name;
   if (phoneInput) phoneInput.value = normalizePhone(phone);
+  if (guardianPhoneInput) guardianPhoneInput.value = normalizePhone(guardianPhone);
 }
 
 function lockCandidateForm() {
   const nameInput = document.getElementById("candidateName");
   const phoneInput = document.getElementById("candidatePhone");
+  const guardianPhoneInput = document.getElementById("candidateGuardianPhone");
   if (nameInput) nameInput.readOnly = true;
   if (phoneInput) phoneInput.readOnly = true;
+  if (guardianPhoneInput) guardianPhoneInput.readOnly = true;
+}
+
+function persistCandidateProfile() {
+  writeStudentProfile({
+    fullName: document.getElementById("candidateName")?.value || "",
+    phone: document.getElementById("candidatePhone")?.value || "",
+    guardianPhone: document.getElementById("candidateGuardianPhone")?.value || ""
+  });
 }
 
 function hasExamSessionInProgress() {
@@ -468,7 +514,7 @@ function renderAttemptReview(exam, attempt) {
   submitBtn.disabled = true;
   submitBtn.textContent = "تم التسليم";
 
-  prefillCandidate(attempt.candidateName || "", attempt.candidatePhone || "");
+  prefillCandidate(attempt.candidateName || "", attempt.candidatePhone || "", attempt.guardianPhone || "");
   lockCandidateForm();
 
   const questions = normalizeQuestions(exam);
@@ -522,14 +568,21 @@ async function submitExam(autoSubmitted = false, options = {}) {
 
   const name = document.getElementById("candidateName").value.trim();
   const phone = normalizePhone(document.getElementById("candidatePhone").value);
-  if (!name || !phone) {
-    alert("يرجى إدخال الاسم ورقم الهاتف.");
+  const guardianPhone = normalizePhone(document.getElementById("candidateGuardianPhone").value);
+  if (!name || !phone || !guardianPhone) {
+    alert("يرجى إدخال الاسم ورقم الهاتف ورقم ولي الأمر.");
     return;
   }
 
   if (!isValidEgyptPhone(phone)) {
     alert("أدخل رقم هاتف مصري صحيح مكوّن من 11 رقمًا ويبدأ بـ 010 أو 011 أو 012 أو 015.");
     document.getElementById("candidatePhone").focus();
+    return;
+  }
+
+  if (!isValidEgyptPhone(guardianPhone)) {
+    alert("أدخل رقم هاتف ولي أمر صحيح مكوّن من 11 رقمًا ويبدأ بـ 010 أو 011 أو 012 أو 015.");
+    document.getElementById("candidateGuardianPhone").focus();
     return;
   }
 
@@ -556,6 +609,7 @@ async function submitExam(autoSubmitted = false, options = {}) {
       examTitle: currentExam.title || "",
       candidateName: name,
       candidatePhone: phone,
+      guardianPhone,
       ipAddress: currentIpAddress,
       ipHash: currentIpHash,
       deviceId: currentDeviceId,
@@ -564,18 +618,26 @@ async function submitExam(autoSubmitted = false, options = {}) {
       score,
       total,
       answers,
+      questionSnapshot: questions.map((question) => ({
+        text: question.text,
+        options: question.options,
+        correctIndex: question.correctIndex,
+        points: question.points
+      })),
       autoSubmitted,
       durationLabel: currentExam.duration || "",
       timeSpentSeconds,
       submittedAt: serverTimestamp()
     };
 
+    persistCandidateProfile();
     await setDoc(doc(attemptsCollection, buildAttemptId(currentExam.id, currentHistoryKey)), attemptData);
     await saveIpHistory({
       examId: currentExam.id,
       examTitle: currentExam.title || "",
       candidateName: name,
       candidatePhone: phone,
+      guardianPhone,
       score,
       total,
       submittedAt: new Date(),
@@ -741,7 +803,15 @@ async function init() {
     currentIdentityMode = "device";
   }
 
-  prefillCandidate(params.name, params.phone);
+  const savedProfile = readStudentProfile();
+  prefillCandidate(
+    params.name || savedProfile.fullName,
+    params.phone || savedProfile.phone,
+    params.guardianPhone || savedProfile.guardianPhone
+  );
+  document.getElementById("candidateName")?.addEventListener("input", persistCandidateProfile);
+  document.getElementById("candidatePhone")?.addEventListener("input", persistCandidateProfile);
+  document.getElementById("candidateGuardianPhone")?.addEventListener("input", persistCandidateProfile);
   watchExam(params.examId);
 }
 
