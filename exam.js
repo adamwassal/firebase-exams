@@ -8,6 +8,7 @@ import {
   ipHistoriesCollection,
   serverTimestamp
 } from "./js/firebase-client.js?v=20260322a";
+import { enableAutoPageLoader, hideGlobalLoader, setInlineLoader, showGlobalLoader, withGlobalLoader } from "./js/page-loader.js";
 
 const examTitle = document.getElementById("examTitle");
 const examSubtitle = document.getElementById("examSubtitle");
@@ -72,6 +73,7 @@ function readParams() {
 
 function showError(message) {
   stopTimer();
+  hideGlobalLoader();
   examLoading.classList.add("hidden");
   examPanel.classList.add("hidden");
   examError.textContent = message;
@@ -440,6 +442,20 @@ function renderQuestions(questions, answersMap = null, reviewMode = false) {
       card.appendChild(label);
     });
 
+    if (reviewMode) {
+      const summary = document.createElement("p");
+      summary.className = "muted";
+
+      if (!attemptAnswer || attemptAnswer.selectedIndex < 0) {
+        summary.textContent = "لم يتم الإختيار";
+      } else {
+        const selectedOption = q.options[attemptAnswer.selectedIndex] || "اختيار غير معروف";
+        summary.textContent = `إجابتك: ${selectedOption}`;
+      }
+
+      card.appendChild(summary);
+    }
+
     questionList.appendChild(card);
   });
 
@@ -604,46 +620,47 @@ async function submitExam(autoSubmitted = false, options = {}) {
   submitBtn.textContent = autoSubmitted ? "انتهى الوقت..." : "جارٍ الإرسال...";
 
   try {
-    const attemptData = {
-      examId: currentExam.id,
-      examTitle: currentExam.title || "",
-      candidateName: name,
-      candidatePhone: phone,
-      guardianPhone,
-      ipAddress: currentIpAddress,
-      ipHash: currentIpHash,
-      deviceId: currentDeviceId,
-      historyKey: currentHistoryKey,
-      identityMode: currentIdentityMode,
-      score,
-      total,
-      answers,
-      questionSnapshot: questions.map((question) => ({
-        text: question.text,
-        options: question.options,
-        correctIndex: question.correctIndex,
-        points: question.points
-      })),
-      autoSubmitted,
-      durationLabel: currentExam.duration || "",
-      timeSpentSeconds,
-      submittedAt: serverTimestamp()
-    };
+    await withGlobalLoader(autoSubmitted ? "جارٍ تسليم الاختبار..." : "جارٍ إرسال الإجابات...", async () => {
+      const attemptData = {
+        examId: currentExam.id,
+        examTitle: currentExam.title || "",
+        candidateName: name,
+        candidatePhone: phone,
+        guardianPhone,
+        ipAddress: currentIpAddress,
+        ipHash: currentIpHash,
+        deviceId: currentDeviceId,
+        historyKey: currentHistoryKey,
+        identityMode: currentIdentityMode,
+        score,
+        total,
+        answers,
+        questionSnapshot: questions.map((question) => ({
+          text: question.text,
+          options: question.options,
+          correctIndex: question.correctIndex,
+          points: question.points
+        })),
+        autoSubmitted,
+        durationLabel: currentExam.duration || "",
+        timeSpentSeconds,
+        submittedAt: serverTimestamp()
+      };
 
-    persistCandidateProfile();
-    await setDoc(doc(attemptsCollection, buildAttemptId(currentExam.id, currentHistoryKey)), attemptData);
-    await saveIpHistory({
-      examId: currentExam.id,
-      examTitle: currentExam.title || "",
-      candidateName: name,
-      candidatePhone: phone,
-      guardianPhone,
-      score,
-      total,
-      submittedAt: new Date(),
-      submittedAtMs: Date.now()
+      persistCandidateProfile();
+      await setDoc(doc(attemptsCollection, buildAttemptId(currentExam.id, currentHistoryKey)), attemptData);
+      await saveIpHistory({
+        examId: currentExam.id,
+        examTitle: currentExam.title || "",
+        candidateName: name,
+        candidatePhone: phone,
+        guardianPhone,
+        score,
+        total,
+        submittedAt: new Date(),
+        submittedAtMs: Date.now()
+      });
     });
-
     hasSubmitted = true;
     if (keepExitAllowed) {
       allowPageExit = true;
@@ -681,6 +698,7 @@ async function submitExam(autoSubmitted = false, options = {}) {
 
 function watchExam(examId) {
   const ref = doc(examsCollection, examId);
+  setInlineLoader(examLoading, "جارٍ تحميل الاختبار...");
 
   onSnapshot(
     ref,
@@ -704,6 +722,7 @@ function watchExam(examId) {
 
       const questions = normalizeQuestions(currentExam);
 
+      hideGlobalLoader();
       examLoading.classList.add("hidden");
       examError.classList.add("hidden");
 
@@ -733,6 +752,7 @@ function watchExam(examId) {
       examPanel.classList.remove("hidden");
     },
     (error) => {
+      hideGlobalLoader();
       console.error(error);
       showError("تعذر تحميل الاختبار. تحقق من إعدادات Firebase والقواعد.");
     }
@@ -747,6 +767,7 @@ examForm.addEventListener("submit", async (e) => {
 examForm.addEventListener("change", updateAnsweredProgress);
 
 if (backToExamsLink) {
+  backToExamsLink.dataset.loaderText = "جارٍ الرجوع إلى صفحة الاختبارات...";
   backToExamsLink.addEventListener("click", async (e) => {
     if (!hasExamSessionInProgress()) return;
 
@@ -756,6 +777,7 @@ if (backToExamsLink) {
 
     await submitExam(true, { keepExitAllowed: true });
     if (allowPageExit) {
+      showGlobalLoader("جارٍ الرجوع إلى صفحة الاختبارات...");
       window.location.href = backToExamsLink.href;
     }
   });
@@ -780,6 +802,9 @@ themeToggle.addEventListener("click", () => {
 
 async function init() {
   bootTheme();
+  enableAutoPageLoader();
+  showGlobalLoader("جارٍ تحميل الاختبار...");
+  setInlineLoader(examLoading, "جارٍ تحميل الاختبار...");
 
   const params = readParams();
   if (!params.examId) {

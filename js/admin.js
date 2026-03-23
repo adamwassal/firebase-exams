@@ -16,6 +16,7 @@ import {
   signInWithEmailAndPassword,
   signOut
 } from "./firebase-client.js?v=20260322a";
+import { enableAutoPageLoader, hideGlobalLoader, setInlineLoader, showGlobalLoader, withGlobalLoader } from "./page-loader.js";
 
 const authCard = document.getElementById("authCard");
 const adminPanel = document.getElementById("adminPanel");
@@ -43,9 +44,13 @@ const attemptDetailsTitle = document.getElementById("attemptDetailsTitle");
 const attemptDetailsMeta = document.getElementById("attemptDetailsMeta");
 const attemptDetailsBody = document.getElementById("attemptDetailsBody");
 const closeAttemptDetailsModal = document.getElementById("closeAttemptDetailsModal");
+const backToHomeBtn = document.getElementById("backToHomeBtn");
 
 let unsubscribeExams = null;
 let unsubscribeAttempts = null;
+let authResolved = false;
+let hasLoadedAdminExams = false;
+let hasLoadedAdminAttempts = false;
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -75,6 +80,14 @@ function clearAuthError() {
 function setFeedback(message, isError = false) {
   formFeedback.textContent = message;
   formFeedback.style.color = isError ? "#b91c1c" : "";
+}
+
+function finishAdminInitialLoading() {
+  if (!authResolved) return;
+  if (authCard.classList.contains("hidden")) {
+    if (!hasLoadedAdminExams || !hasLoadedAdminAttempts) return;
+  }
+  hideGlobalLoader();
 }
 
 function formatFirebaseError(error, fallback) {
@@ -278,7 +291,9 @@ function renderAdminList(exams) {
       if (!ok) return;
 
       try {
-        await deleteDoc(doc(examsCollection, exam.id));
+        await withGlobalLoader("جارٍ حذف الاختبار...", async () => {
+          await deleteDoc(doc(examsCollection, exam.id));
+        });
         setFeedback("تم حذف الاختبار بنجاح.");
       } catch (error) {
         console.error(error);
@@ -393,21 +408,23 @@ function renderAttemptDetails(attempt, questions) {
 async function openAttemptDetails(attempt) {
   attemptDetailsTitle.textContent = "جارٍ تحميل تفاصيل المحاولة...";
   attemptDetailsMeta.textContent = "";
-  attemptDetailsBody.innerHTML = '<p class="muted">جارٍ تحميل الأسئلة والإجابات...</p>';
+  setInlineLoader(attemptDetailsBody, "جارٍ تحميل الأسئلة والإجابات...");
   attemptDetailsModal.classList.remove("hidden");
   attemptDetailsModal.setAttribute("aria-hidden", "false");
 
   try {
-    let questions = normalizeAttemptQuestions(attempt.questionSnapshot);
+    await withGlobalLoader("جارٍ تحميل تفاصيل المحاولة...", async () => {
+      let questions = normalizeAttemptQuestions(attempt.questionSnapshot);
 
-    if (!questions.length && attempt.examId) {
-      const examSnap = await getDoc(doc(examsCollection, attempt.examId));
-      if (examSnap.exists()) {
-        questions = normalizeAttemptQuestions(examSnap.data().questions);
+      if (!questions.length && attempt.examId) {
+        const examSnap = await getDoc(doc(examsCollection, attempt.examId));
+        if (examSnap.exists()) {
+          questions = normalizeAttemptQuestions(examSnap.data().questions);
+        }
       }
-    }
 
-    renderAttemptDetails(attempt, questions);
+      renderAttemptDetails(attempt, questions);
+    });
   } catch (error) {
     console.error(error);
     attemptDetailsTitle.textContent = "تعذر تحميل التفاصيل";
@@ -451,15 +468,21 @@ function renderAttemptsList(attempts) {
 
 function watchExams() {
   if (unsubscribeExams) unsubscribeExams();
+  setInlineLoader(adminLoading, "جارٍ تحميل الاختبارات...");
+  adminLoading.classList.remove("hidden");
 
   const q = query(examsCollection, orderBy("date", "desc"));
   unsubscribeExams = onSnapshot(
     q,
     (snapshot) => {
+      hasLoadedAdminExams = true;
+      finishAdminInitialLoading();
       const exams = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       renderAdminList(exams);
     },
     (error) => {
+      hasLoadedAdminExams = true;
+      finishAdminInitialLoading();
       console.error(error);
       setFeedback(formatFirebaseError(error, "تعذر تحميل قائمة الاختبارات"), true);
       adminLoading.classList.add("hidden");
@@ -469,15 +492,21 @@ function watchExams() {
 
 function watchAttempts() {
   if (unsubscribeAttempts) unsubscribeAttempts();
+  setInlineLoader(attemptsLoading, "جارٍ تحميل المحاولات...");
+  attemptsLoading.classList.remove("hidden");
 
   const q = query(attemptsCollection, orderBy("submittedAt", "desc"));
   unsubscribeAttempts = onSnapshot(
     q,
     (snapshot) => {
+      hasLoadedAdminAttempts = true;
+      finishAdminInitialLoading();
       const attempts = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       renderAttemptsList(attempts);
     },
     (error) => {
+      hasLoadedAdminAttempts = true;
+      finishAdminInitialLoading();
       console.error(error);
       attemptsLoading.classList.add("hidden");
       attemptsEmpty.classList.remove("hidden");
@@ -500,7 +529,9 @@ loginForm.addEventListener("submit", async (e) => {
   }
 
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    await withGlobalLoader("جارٍ تسجيل الدخول...", async () => {
+      await signInWithEmailAndPassword(auth, email, password);
+    });
     loginForm.reset();
   } catch (error) {
     console.error(error);
@@ -510,7 +541,9 @@ loginForm.addEventListener("submit", async (e) => {
 
 logoutBtn.addEventListener("click", async () => {
   try {
-    await signOut(auth);
+    await withGlobalLoader("جارٍ تسجيل الخروج...", async () => {
+      await signOut(auth);
+    });
   } catch (error) {
     console.error(error);
     showAuthError(formatFirebaseError(error, "فشل تسجيل الخروج"));
@@ -565,16 +598,18 @@ examForm.addEventListener("submit", async (e) => {
   };
 
   try {
-    if (editingId.value) {
-      await updateDoc(doc(examsCollection, editingId.value), payload);
-      setFeedback("تم تحديث الاختبار بنجاح.");
-    } else {
-      await addDoc(examsCollection, {
-        ...payload,
-        createdAt: serverTimestamp()
-      });
-      setFeedback("تم إنشاء الاختبار بنجاح.");
-    }
+    await withGlobalLoader(editingId.value ? "جارٍ تحديث الاختبار..." : "جارٍ إنشاء الاختبار...", async () => {
+      if (editingId.value) {
+        await updateDoc(doc(examsCollection, editingId.value), payload);
+        setFeedback("تم تحديث الاختبار بنجاح.");
+      } else {
+        await addDoc(examsCollection, {
+          ...payload,
+          createdAt: serverTimestamp()
+        });
+        setFeedback("تم إنشاء الاختبار بنجاح.");
+      }
+    });
 
     resetFormMode();
   } catch (error) {
@@ -584,10 +619,13 @@ examForm.addEventListener("submit", async (e) => {
 });
 
 onAuthStateChanged(auth, (user) => {
+  authResolved = true;
   if (user) {
     authCard.classList.add("hidden");
     adminPanel.classList.remove("hidden");
     logoutBtn.classList.remove("hidden");
+    hasLoadedAdminExams = false;
+    hasLoadedAdminAttempts = false;
     watchExams();
     watchAttempts();
   } else {
@@ -604,14 +642,20 @@ onAuthStateChanged(auth, (user) => {
     logoutBtn.classList.add("hidden");
     adminList.innerHTML = "";
     attemptsList.innerHTML = "";
+    setInlineLoader(adminLoading, "جارٍ تحميل الاختبارات...");
+    setInlineLoader(attemptsLoading, "جارٍ تحميل المحاولات...");
+    adminLoading.classList.remove("hidden");
     attemptsLoading.classList.remove("hidden");
     attemptsEmpty.classList.add("hidden");
     resetFormMode();
     clearAuthError();
+    finishAdminInitialLoading();
   }
 });
 
 bootTheme();
+enableAutoPageLoader();
+showGlobalLoader("جارٍ تحميل لوحة الإدارة...");
 addQuestionBuilderItem();
 
 if (addQuestionBtn) {
@@ -628,4 +672,9 @@ attemptDetailsModal?.addEventListener("click", (event) => {
 themeToggle.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme");
   setTheme(current === "dark" ? "light" : "dark");
+});
+
+backToHomeBtn?.addEventListener("click", () => {
+  showGlobalLoader("جارٍ الانتقال إلى الصفحة الرئيسية...");
+  window.location.href = "index.html";
 });

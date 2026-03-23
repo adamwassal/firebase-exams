@@ -10,6 +10,7 @@ import {
   onSnapshot,
   serverTimestamp
 } from "./js/firebase-client.js?v=20260322a";
+import { enableAutoPageLoader, hideGlobalLoader, setInlineLoader, showGlobalLoader, withGlobalLoader } from "./js/page-loader.js";
 
 const cardsGrid = document.getElementById("cardsGrid");
 const loadingState = document.getElementById("loadingState");
@@ -19,6 +20,9 @@ const examCardTemplate = document.getElementById("examCardTemplate");
 const searchInput = document.getElementById("searchInput");
 const subjectFilter = document.getElementById("subjectFilter");
 const themeToggle = document.getElementById("themeToggle");
+const aboutDeveloperBtn = document.getElementById("aboutDeveloperBtn");
+const aboutDeveloperModal = document.getElementById("aboutDeveloperModal");
+const closeAboutDeveloperModal = document.getElementById("closeAboutDeveloperModal");
 
 const registerModal = document.getElementById("registerModal");
 const registerExamTitle = document.getElementById("registerExamTitle");
@@ -41,6 +45,8 @@ let historyByExamId = {};
 let currentDeviceId = "";
 let currentHistoryKey = "";
 let currentIdentityMode = "ip";
+let hasLoadedExamList = false;
+let hasLoadedIpHistory = false;
 const IP_CACHE_KEY = "firebase-exams:last-known-ip";
 const IP_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const DEVICE_ID_KEY = "firebase-exams:device-id";
@@ -290,6 +296,11 @@ function renderError(message) {
   errorState.classList.remove("hidden");
 }
 
+function finishInitialPageLoading() {
+  if (!hasLoadedExamList || !hasLoadedIpHistory) return;
+  hideGlobalLoader();
+}
+
 function applyFilters() {
   const q = normalize(searchInput.value);
   const selectedSubject = subjectFilter.value;
@@ -314,6 +325,7 @@ function openRegisterModal(exam) {
   if (!hasQuestions || !exam?.isEnabled) return;
 
   if (historyByExamId[exam.id]) {
+    showGlobalLoader("جارٍ فتح صفحة الامتحان...");
     window.location.href = buildExamUrl(exam.id);
     return;
   }
@@ -330,6 +342,18 @@ function closeRegister() {
   registerModal.setAttribute("aria-hidden", "true");
   registerModal.classList.add("hidden");
   selectedExamForRegistration = null;
+}
+
+function openAboutDeveloper() {
+  if (!aboutDeveloperModal) return;
+  aboutDeveloperModal.setAttribute("aria-hidden", "false");
+  aboutDeveloperModal.classList.remove("hidden");
+}
+
+function closeAboutDeveloper() {
+  if (!aboutDeveloperModal) return;
+  aboutDeveloperModal.setAttribute("aria-hidden", "true");
+  aboutDeveloperModal.classList.add("hidden");
 }
 
 function createHistoryNode(entry) {
@@ -351,6 +375,7 @@ function createHistoryNode(entry) {
   const link = document.createElement("a");
   link.className = "btn btn-primary";
   link.href = buildExamUrl(entry.examId);
+  link.dataset.loaderText = "جارٍ فتح صفحة الامتحان...";
   link.textContent = "مراجعة الإجابات";
   actions.appendChild(link);
 
@@ -378,7 +403,7 @@ function renderIpHistory() {
 }
 
 async function loadIpHistory() {
-  ipHistoryHint.textContent = "جارٍ تحميل سجل الامتحانات من هذا الـ IP...";
+  setInlineLoader(ipHistoryHint, "جارٍ تحميل سجل الامتحانات من هذا الـ IP...");
   currentDeviceId = getOrCreateDeviceId();
   currentIdentityMode = "ip";
 
@@ -391,8 +416,8 @@ async function loadIpHistory() {
     historyByExamId = historySnap.exists() ? historySnap.data().attemptsByExam || {} : {};
     ipHistoryHint.textContent =
       ipLookup.source === "cache"
-        ? `تعذر التحقق المباشر من الـ IP الحالي. تم استخدام آخر IP معروف: ${currentIpAddress}`
-        : `تم التعرف على الـ IP الحالي: ${currentIpAddress}`;
+        ? `تعذر التحقق المباشر من الـ IP الحالي. تم استخدام آخر IP معروف`
+        : `تم التعرف على الـ IP الحالي`;
   } catch (error) {
     console.error(error);
     currentIpAddress = "";
@@ -411,6 +436,8 @@ async function loadIpHistory() {
     }
   }
 
+  hasLoadedIpHistory = true;
+  finishInitialPageLoading();
   renderIpHistory();
   applyFilters();
 }
@@ -439,7 +466,7 @@ function renderCards(exams) {
     node.querySelector('[data-role="date"]').textContent = formatDate(exam.date);
     node.querySelector('[data-role="title"]').textContent = exam.title || "اختبار بدون عنوان";
     node.querySelector('[data-role="description"]').textContent = exam.description || "لا يوجد وصف متاح.";
-    node.querySelector('[data-role="duration"]').textContent = `المدة: ${exam.duration || "غير محددة"}`;
+    node.querySelector('[data-role="duration"]').textContent = `المدة: ${exam.duration || "غير محددة"} دقيقة`;
     node.querySelector('[data-role="questionCount"]').textContent = `${questions.length} سؤال`;
 
     const registerBtn = node.querySelector('[data-role="register"]');
@@ -468,11 +495,14 @@ function renderCards(exams) {
 }
 
 function startRealtime() {
+  setInlineLoader(loadingState, "جارٍ تحميل الاختبارات...");
   const q = query(examsCollection, orderBy("date", "desc"));
 
   onSnapshot(
     q,
     (snapshot) => {
+      hasLoadedExamList = true;
+      finishInitialPageLoading();
       loadingState.classList.add("hidden");
       errorState.classList.add("hidden");
 
@@ -481,6 +511,8 @@ function startRealtime() {
       applyFilters();
     },
     (error) => {
+      hasLoadedExamList = true;
+      finishInitialPageLoading();
       console.error(error);
       renderError("تعذر تحميل الاختبارات. تحقق من إعدادات Firebase وقواعد Firestore.");
     }
@@ -517,20 +549,22 @@ registerForm.addEventListener("submit", async (e) => {
   }
 
   try {
-    persistRegisterForm();
+    await withGlobalLoader("جارٍ حفظ التسجيل...", async () => {
+      persistRegisterForm();
 
-    await addDoc(registrationsCollection, {
-      examId: selectedExamForRegistration.id,
-      examTitle: selectedExamForRegistration.title || "",
-      fullName,
-      phone,
-      guardianPhone,
-      ipAddress: currentIpAddress || "",
-      ipHash: currentIpHash || "",
-      deviceId: currentDeviceId || "",
-      historyKey: currentHistoryKey || "",
-      identityMode: currentIdentityMode,
-      registeredAt: serverTimestamp()
+      await addDoc(registrationsCollection, {
+        examId: selectedExamForRegistration.id,
+        examTitle: selectedExamForRegistration.title || "",
+        fullName,
+        phone,
+        guardianPhone,
+        ipAddress: currentIpAddress || "",
+        ipHash: currentIpHash || "",
+        deviceId: currentDeviceId || "",
+        historyKey: currentHistoryKey || "",
+        identityMode: currentIdentityMode,
+        registeredAt: serverTimestamp()
+      });
     });
 
     const examToStart = selectedExamForRegistration;
@@ -539,6 +573,7 @@ registerForm.addEventListener("submit", async (e) => {
     closeRegister();
 
     if (hasQuestions) {
+      showGlobalLoader("جارٍ فتح صفحة الامتحان...");
       window.location.href = buildExamUrl(examToStart.id, fullName, phone, guardianPhone);
     } else {
       alert("تم التسجيل بنجاح، لكن هذا الاختبار لا يحتوي على أسئلة إلكترونية حتى الآن.");
@@ -553,6 +588,11 @@ closeRegisterModal.addEventListener("click", closeRegister);
 registerModal.addEventListener("click", (e) => {
   if (e.target === registerModal) closeRegister();
 });
+aboutDeveloperBtn?.addEventListener("click", openAboutDeveloper);
+closeAboutDeveloperModal?.addEventListener("click", closeAboutDeveloper);
+aboutDeveloperModal?.addEventListener("click", (e) => {
+  if (e.target === aboutDeveloperModal) closeAboutDeveloper();
+});
 regNameInput?.addEventListener("input", persistRegisterForm);
 regPhoneInput?.addEventListener("input", persistRegisterForm);
 regGuardianPhoneInput?.addEventListener("input", persistRegisterForm);
@@ -566,5 +606,7 @@ themeToggle.addEventListener("click", () => {
 });
 
 bootTheme();
+enableAutoPageLoader();
+showGlobalLoader("جارٍ تحميل البيانات...");
 startRealtime();
 loadIpHistory();

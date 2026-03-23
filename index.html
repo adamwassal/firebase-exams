@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="ar" dir="rtl" data-theme="light">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,16 +10,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
 </head>
+
 <body>
   <div class="bg-orb orb-a"></div>
   <div class="bg-orb orb-b"></div>
 
   <header class="shell topbar glass">
     <div>
-      <h1>منصة الاختبارات</h1>
+      <div style="display: flex; gap:10px; align-items: center;">
+
+        <img src="assets/logo.png" alt="" style="width: 10%;">
+        <h1>منصة الاختبارات</h1>
+      </div>
       <p class="muted">تصفّح الاختبارات، سجّل بياناتك، وابدأ الاختبار الإلكتروني بسهولة.</p>
     </div>
-    <button id="themeToggle" class="btn btn-ghost" aria-label="تبديل المظهر">تبديل المظهر</button>
+    <div class="topbar-actions">
+      <button id="aboutDeveloperBtn" class="btn btn-ghost" type="button" aria-label="عن المطور">عن المطور</button>
+      <button id="themeToggle" class="btn btn-ghost" type="button" aria-label="تبديل المظهر">تبديل المظهر</button>
+    </div>
   </header>
 
   <main class="shell page-gap">
@@ -67,6 +76,7 @@
   <section id="registerModal" class="modal hidden" aria-hidden="true">
     <div class="modal-card glass">
       <h2>تسجيل الاختبار</h2>
+      <p>يجب إدخال الأسماء و الأرقام المسجله لدينا و الا لن نعتبرك قد أجرئت الإختبار</p>
       <p id="registerExamTitle" class="muted"></p>
       <form id="registerForm" class="stack">
         <div class="field">
@@ -75,11 +85,13 @@
         </div>
         <div class="field">
           <label for="regPhone">رقم الهاتف</label>
-          <input id="regPhone" type="tel" inputmode="numeric" maxlength="11" pattern="01[0125][0-9]{8}" placeholder="01xxxxxxxxx" required />
+          <input id="regPhone" type="tel" inputmode="numeric" maxlength="11" pattern="01[0125][0-9]{8}"
+            placeholder="01xxxxxxxxx" required />
         </div>
         <div class="field">
           <label for="regGuardianPhone">رقم هاتف ولي الأمر</label>
-          <input id="regGuardianPhone" type="tel" inputmode="numeric" maxlength="11" pattern="01[0125][0-9]{8}" placeholder="01xxxxxxxxx" required />
+          <input id="regGuardianPhone" type="tel" inputmode="numeric" maxlength="11" pattern="01[0125][0-9]{8}"
+            placeholder="01xxxxxxxxx" required />
         </div>
         <div class="row-actions">
           <button type="submit" class="btn btn-primary">تسجيل ومتابعة</button>
@@ -87,6 +99,24 @@
         </div>
         <p id="registerFeedback" class="muted"></p>
       </form>
+    </div>
+  </section>
+
+  <section id="aboutDeveloperModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card glass about-modal-card">
+      <div class="section-head">
+        <h2>عن المطور</h2>
+        <button id="closeAboutDeveloperModal" type="button" class="btn btn-ghost btn-sm">إغلاق</button>
+      </div>
+      <div class="about-developer-box">
+        <img src="assets/tech.png" alt="شعار المنصة" class="about-developer-logo" />
+        <div class="stack">
+          <p class="about-developer-name">شركة الميثاق للتقنية</p>
+          <p class="muted">هذه الشركة قد أنشأت بفضل الله لتوفير الأنظمة و البرامج الإدارية لتسهيل العمل و توفير الوقت
+            بإذن الله تعالى</p>
+
+        </div>
+      </div>
     </div>
   </section>
 
@@ -111,4 +141,5 @@
 
   <script type="module" src="./main.js?v=20260322f"></script>
 </body>
+
 </html>
